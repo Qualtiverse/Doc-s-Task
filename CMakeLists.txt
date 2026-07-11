@@ -39,22 +39,19 @@ FetchContent_MakeAvailable(raylib raylib-cpp)
 # Find raylib (from FetchContent or system)
 find_package(raylib CONFIG REQUIRED)
 
-# raylib-cpp is header-only - add its include directory directly
+# raylib-cpp is header-only - add its include directory to raylib target
 target_include_directories(raylib INTERFACE
     ${raylib-cpp_SOURCE_DIR}/include
 )
 
-# Executable
+# Executable - all source files
 add_executable(DocTask
     src/main.cpp
-    src/core/Game.cpp
-    src/core/TimeRecorder.cpp
-    src/core/PhysicsObject.cpp
+    src/core/CoreTypes.cpp
+    src/core/GameManager.cpp
     src/core/Level.cpp
     src/ui/UIManager.cpp
-    src/ui/TimelineUI.cpp
-    src/levels/LevelLoader.cpp
-    src/levels/Level1.cpp
+    src/levels/Levels.cpp
 )
 
 target_include_directories(DocTask PRIVATE
