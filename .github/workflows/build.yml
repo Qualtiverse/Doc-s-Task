@@ -24,11 +24,29 @@ jobs:
           path: raylib-src
           ref: 5.5
 
+      - name: Show directory structure
+        run: |
+          Write-Host "=== Workspace ==="
+          Get-ChildItem
+          Write-Host "=== raylib-src ==="
+          if (Test-Path raylib-src) { Get-ChildItem raylib-src } else { Write-Error "raylib-src NOT FOUND" }
+          Write-Host "=== CMake version ==="
+          cmake --version
+
       - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release 2>&1
+        continue-on-error: true
+
+      - name: Show CMake error output
+        if: failure()
+        run: |
+          if (Test-Path "build/CMakeFiles/CMakeOutput.log") { Get-Content "build/CMakeFiles/CMakeOutput.log" -Tail 30 }
+          if (Test-Path "build/CMakeFiles/CMakeError.log") { Get-Content "build/CMakeFiles/CMakeError.log" -Tail 30 }
+          Write-Host "Last error: $($Error[0])"
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 2>&1
+        continue-on-error: true
 
       - name: Verify
         run: |
@@ -43,6 +61,7 @@ jobs:
           }
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: DocTask-Windows
