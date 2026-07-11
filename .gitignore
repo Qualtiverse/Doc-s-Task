@@ -43,7 +43,8 @@ CTestTestfile.cmake
 .DS_Store
 Thumbs.db
 
-# Raylib cache
+# Raylib
+raylib-src/
 raylib-*/
 raylib-cpp-*/
 
