@@ -4,35 +4,47 @@ project(DocTask LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
-endif()
-
-# Try finding raylib via CMake config
+# Try finding raylib via CMake config first
 find_package(raylib CONFIG QUIET)
 
-if(raylib_FOUND)
-    message(STATUS "Using raylib from: ${raylib_DIR}")
-else()
-    message(STATUS "Looking for raylib in CMAKE_PREFIX_PATH: $ENV{CMAKE_PREFIX_PATH}")
-    # Manually set up raylib paths - look for it in common locations
+if(NOT raylib_FOUND)
     if(DEFINED ENV{RAYLIB_PATH})
         set(RAYLIB_ROOT "$ENV{RAYLIB_PATH}")
     else()
         set(RAYLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/raylib-bin")
     endif()
-    
-    if(EXISTS "${RAYLIB_ROOT}/include/raylib.h")
-        message(STATUS "Found raylib headers at: ${RAYLIB_ROOT}/include")
+
+    # Find raylib include dir
+    find_path(RAYLIB_INCLUDE_DIR raylib.h PATHS "${RAYLIB_ROOT}/include" "${RAYLIB_ROOT}" NO_DEFAULT_PATH)
+    if(NOT RAYLIB_INCLUDE_DIR)
+        find_path(RAYLIB_INCLUDE_DIR raylib.h)
+    endif()
+
+    # Find raylib library (MSVC .lib or MinGW .a)
+    find_library(RAYLIB_LIBRARY raylib PATHS "${RAYLIB_ROOT}/lib" "${RAYLIB_ROOT}" NO_DEFAULT_PATH)
+    if(NOT RAYLIB_LIBRARY)
+        find_library(RAYLIB_LIBRARY raylib)
+    endif()
+
+    if(RAYLIB_INCLUDE_DIR AND RAYLIB_LIBRARY)
+        message(STATUS "Found raylib: ${RAYLIB_LIBRARY}")
+        message(STATUS "  includes: ${RAYLIB_INCLUDE_DIR}")
         add_library(raylib STATIC IMPORTED GLOBAL)
         set_target_properties(raylib PROPERTIES
-            IMPORTED_LOCATION "${RAYLIB_ROOT}/lib/raylib.lib"
-            INTERFACE_INCLUDE_DIRECTORIES "${RAYLIB_ROOT}/include"
+            IMPORTED_LOCATION "${RAYLIB_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${RAYLIB_INCLUDE_DIR}"
         )
         set(raylib_FOUND TRUE)
     else()
-        message(FATAL_ERROR "raylib not found. Set RAYLIB_PATH or install raylib.")
+        message(FATAL_ERROR "raylib not found. Set RAYLIB_PATH or download raylib binaries.")
     endif()
+endif()
+
+# Required system libs for raylib on Windows
+if(WIN32)
+    set(RAYLIB_SYSTEM_LIBS winmm gdi32 opengl32)
+else()
+    set(RAYLIB_SYSTEM_LIBS)
 endif()
 
 add_executable(DocTask
@@ -51,4 +63,4 @@ target_include_directories(DocTask PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/levels
 )
 
-target_link_libraries(DocTask PRIVATE raylib winmm)
+target_link_libraries(DocTask PRIVATE raylib ${RAYLIB_SYSTEM_LIBS})
