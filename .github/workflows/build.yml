@@ -42,7 +42,7 @@ jobs:
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
 
       - name: Build
-        run: cmake --build build --config Release -- -j$(nproc)
+        run: cmake --build build --config Release -- -j$env:NUMBER_OF_PROCESSORS
 
       - name: Verify
         run: |
