@@ -1,11 +1,8 @@
 #include "GameManager.h"
-#include "Level1.h"
-#include "Level2.h"
-#include "Level3.h"
-#include "Level4.h"
-#include "Level5.h"
+#include "Level.h"
+#include "Levels.h"
 #include "UIManager.h"
-#include "raylib-cpp.hpp"
+#include "raylib.h"
 #include <iostream>
 
 GameManager& GameManager::Instance() {
@@ -16,11 +13,10 @@ GameManager& GameManager::Instance() {
 bool GameManager::Initialize() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Doc's Task - Time Manipulation Puzzle");
-    SetTargetFPS(TARGET_FPS);
+    SetTargetFPS(60);
     
     InitAudioDevice();
     
-    m_camera = raylib::Camera3D({0});
     m_camera.position = {10, 10, 10};
     m_camera.target = {0, 0, 0};
     m_camera.up = {0, 1, 0};
@@ -63,21 +59,9 @@ void GameManager::Shutdown() {
 void GameManager::ChangeState(GameState newState) {
     m_state = newState;
     if (newState == GameState::PLAYING) {
+        m_recorder.StopReplay();
+        m_recorder.StopRecording();
         m_timeMode = TimeMode::LIVE;
-        m_recorder.StopReplay();
-        m_recorder.StopRecording();
-    }
-}
-
-void GameManager::SetTimeMode(TimeMode mode) {
-    m_timeMode = mode;
-    if (mode == TimeMode::RECORDING) {
-        m_recorder.StartRecording(m_levels[m_currentLevelIndex]->GetObjectCount());
-    } else if (mode == TimeMode::REPLAYING) {
-        m_recorder.StartReplay();
-    } else {
-        m_recorder.StopRecording();
-        m_recorder.StopReplay();
     }
 }
 
@@ -101,13 +85,8 @@ void GameManager::ReloadCurrentLevel() {
 }
 
 void GameManager::NextLevel() {
-    int next = (m_currentLevelIndex + 1) % m_levels.size();
+    int next = (m_currentLevelIndex + 1) % (int)m_levels.size();
     LoadLevel(next);
-}
-
-void GameManager::PreviousLevel() {
-    int prev = (m_currentLevelIndex - 1 + m_levels.size()) % m_levels.size();
-    LoadLevel(prev);
 }
 
 void GameManager::Update(float dt) {
@@ -123,8 +102,6 @@ void GameManager::Update(float dt) {
             ChangeState(GameState::PAUSED);
         } else if (m_state == GameState::PAUSED) {
             ChangeState(GameState::PLAYING);
-        } else if (m_state == GameState::MENU) {
-            LoadLevel(0);
         }
         return;
     }
@@ -146,7 +123,7 @@ void GameManager::Update(float dt) {
         return;
     }
     
-    Level* level = m_levels[m_currentLevelIndex].get();
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
     if (!level) return;
     
     level->ProcessInput(dt, m_timeMode);
@@ -155,11 +132,11 @@ void GameManager::Update(float dt) {
         if (IsKeyPressed(KEY_R)) {
             if (m_recorder.IsRecording()) {
                 m_recorder.StopRecording();
-                SetTimeMode(TimeMode::LIVE);
+                m_timeMode = TimeMode::LIVE;
                 ChangeState(GameState::PLAYING);
             } else {
                 m_recorder.StartRecording(level->GetObjectCount());
-                SetTimeMode(TimeMode::RECORDING);
+                m_timeMode = TimeMode::RECORDING;
                 ChangeState(GameState::RECORDING);
             }
         }
@@ -168,21 +145,21 @@ void GameManager::Update(float dt) {
             m_levelTime = 0;
             level->Reset();
             m_recorder.StartReplay();
-            SetTimeMode(TimeMode::REPLAYING);
+            m_timeMode = TimeMode::REPLAYING;
             ChangeState(GameState::REPLAYING);
         }
     }
     else if (m_timeMode == TimeMode::RECORDING) {
         if (IsKeyPressed(KEY_R)) {
             m_recorder.StopRecording();
-            SetTimeMode(TimeMode::LIVE);
+            m_timeMode = TimeMode::LIVE;
             ChangeState(GameState::PLAYING);
         }
     }
     else if (m_timeMode == TimeMode::REPLAYING) {
         if (IsKeyPressed(KEY_T)) {
             m_recorder.StopReplay();
-            SetTimeMode(TimeMode::LIVE);
+            m_timeMode = TimeMode::LIVE;
             ChangeState(GameState::PLAYING);
         }
     }
@@ -216,7 +193,7 @@ void GameManager::Update(float dt) {
                 level->SetObjectStates(replayStates);
             } else {
                 m_recorder.StopReplay();
-                SetTimeMode(TimeMode::LIVE);
+                m_timeMode = TimeMode::LIVE;
                 ChangeState(GameState::PLAYING);
             }
         }
@@ -224,7 +201,7 @@ void GameManager::Update(float dt) {
         m_accumulator -= FIXED_TIMESTEP;
     }
     
-    m_ui->Update(dt, m_state, m_timeMode, m_recorder, level);
+    m_ui->Update(dt, m_state, m_timeMode, m_recorder, m_levels[m_currentLevelIndex].get());
     UpdateCamera(dt);
 }
 
@@ -235,7 +212,7 @@ void GameManager::Draw() {
     if (m_state == GameState::MENU) {
         m_ui->Draw(m_state, m_timeMode, m_recorder, nullptr, m_levelTime);
     } else {
-        Level* level = m_levels[m_currentLevelIndex].get();
+        LevelBase* level = m_levels[m_currentLevelIndex].get();
         
         BeginMode3D(m_camera);
         if (level) level->Draw(m_camera);
@@ -250,7 +227,7 @@ void GameManager::Draw() {
 
 void GameManager::UpdateCamera(float dt) {
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-        raylib::Vector2 delta = GetMouseDelta();
+        Vector2 delta = GetMouseDelta();
         m_cameraAngle -= delta.x * 0.003f;
         m_cameraHeight += delta.y * 0.05f;
         m_cameraHeight = Clamp(m_cameraHeight, 2.0f, 20.0f);
@@ -259,11 +236,6 @@ void GameManager::UpdateCamera(float dt) {
     float wheel = GetMouseWheelMove();
     m_cameraDistance -= wheel * 1.0f;
     m_cameraDistance = Clamp(m_cameraDistance, 5.0f, 30.0f);
-    
-    Level* level = m_levels[m_currentLevelIndex].get();
-    if (level) {
-        m_cameraTarget = level->GetPlayerStart();
-    }
     
     m_camera.position.x = m_cameraTarget.x + cosf(m_cameraAngle) * m_cameraDistance;
     m_camera.position.z = m_cameraTarget.z + sinf(m_cameraAngle) * m_cameraDistance;

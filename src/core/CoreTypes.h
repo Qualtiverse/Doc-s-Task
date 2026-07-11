@@ -1,10 +1,11 @@
 #pragma once
 
-#include "raylib-cpp.hpp"
 #include "raylib.h"
 #include <vector>
 #include <array>
 #include <cstdint>
+#include <string>
+#include <memory>
 
 constexpr int SCREEN_WIDTH = 1280;
 constexpr int SCREEN_HEIGHT = 720;
@@ -29,89 +30,120 @@ enum class TimeMode {
 };
 
 struct TransformData {
-    raylib::Vector3 position{0, 0, 0};
-    raylib::Quaternion rotation{0, 0, 0, 1};
-    raylib::Vector3 velocity{0, 0, 0};
-    raylib::Vector3 angularVelocity{0, 0, 0};
+    Vector3 position{0, 0, 0};
+    Quaternion rotation{0, 0, 0, 1};
+    Vector3 velocity{0, 0, 0};
+    Vector3 angularVelocity{0, 0, 0};
     bool valid = false;
     uint32_t objectId = 0;
 };
 
-struct RecordFrame {
+struct RecordingFrame {
     float timestamp = 0;
-    std::array<TransformData, MAX_PHYSICS_OBJECTS> transforms;
-    int activeCount = 0;
+    std::vector<TransformData> objectStates;
+    
+    RecordingFrame() : timestamp(0) {}
+    RecordingFrame(float time) : timestamp(time) {}
 };
 
-struct RecordedObject {
-    uint32_t id = 0;
-    std::vector<TransformData> keyframes;
-    std::string name;
+class TimeRecorder {
+public:
+    TimeRecorder(int maxFrames = MAX_RECORD_FRAMES);
+    
+    void StartRecording(int numObjects);
+    void StopRecording();
+    void RecordFrame(const std::vector<TransformData>& states, float time);
+    
+    void StartReplay();
+    void StopReplay();
+    bool GetReplayFrame(std::vector<TransformData>& outStates, float currentTime);
+    
+    void ScrubToTime(float time);
+    float GetRecordingDuration() const;
+    int GetFrameCount() const;
+    bool IsRecording() const { return m_recording; }
+    bool IsReplaying() const { return m_replaying; }
+    
+    void Clear();
+    
+private:
+    std::vector<RecordingFrame> m_frames;
+    int m_maxFrames;
+    int m_numObjects = 0;
+    bool m_recording = false;
+    bool m_replaying = false;
+    int m_replayIndex = 0;
+    int m_currentFrame = 0;
+    float m_recordingStartTime = 0;
+    float m_replayStartTime = 0;
 };
 
 class PhysicsObject {
 public:
-    PhysicsObject() = default;
-    PhysicsObject(uint32_t id, const raylib::Vector3& pos, const raylib::Vector3& size, float mass, bool isStatic = false);
+    PhysicsObject();
+    PhysicsObject(const Vector3& pos, const Vector3& size, float mass, bool isStatic = false);
     
     void Update(float dt);
     void Draw() const;
     
-    void ApplyForce(const raylib::Vector3& force);
-    void ApplyImpulse(const raylib::Vector3& impulse);
-    void SetPosition(const raylib::Vector3& pos);
-    void SetRotation(const raylib::Quaternion& rot);
-    void SetVelocity(const raylib::Vector3& vel);
-    void SetAngularVelocity(const raylib::Vector3& vel);
+    void ApplyForce(const Vector3& force);
+    void ApplyImpulse(const Vector3& impulse);
+    void SetPosition(const Vector3& pos);
+    void SetRotation(const Quaternion& rot);
+    void SetVelocity(const Vector3& vel);
+    void SetAngularVelocity(const Vector3& vel);
+    void SetColor(const Color& color) { m_color = color; }
+    void SetActive(bool active) { m_active = active; }
     
-    raylib::Vector3 GetPosition() const { return m_position; }
-    raylib::Quaternion GetRotation() const { return m_rotation; }
-    raylib::Vector3 GetVelocity() const { return m_velocity; }
-    raylib::Vector3 GetAngularVelocity() const { return m_angularVelocity; }
+    Vector3 GetPosition() const { return m_position; }
+    Quaternion GetRotation() const { return m_rotation; }
+    Vector3 GetVelocity() const { return m_velocity; }
+    Vector3 GetAngularVelocity() const { return m_angularVelocity; }
+    Vector3 GetSize() const { return m_size; }
+    Vector3 GetStartPosition() const { return m_startPosition; }
     uint32_t GetId() const { return m_id; }
+    float GetMass() const { return m_mass; }
     bool IsStatic() const { return m_isStatic; }
     bool IsActive() const { return m_active; }
-    
-    void SetActive(bool active) { m_active = active; }
-    void SetColor(const raylib::Color& color) { m_color = color; }
+    bool IsDynamic() const { return !m_isStatic; }
     
     TransformData GetTransformData() const;
     void SetFromTransformData(const TransformData& data);
     
+    void SetStartPosition(const Vector3& pos) { m_startPosition = pos; }
+    
 private:
     uint32_t m_id = 0;
-    raylib::Vector3 m_position{0, 0, 0};
-    raylib::Quaternion m_rotation{0, 0, 0, 1};
-    raylib::Vector3 m_velocity{0, 0, 0};
-    raylib::Vector3 m_angularVelocity{0, 0, 0};
-    raylib::Vector3 m_force{0, 0, 0};
-    raylib::Vector3 m_torque{0, 0, 0};
-    raylib::Vector3 m_size{1, 1, 1};
+    Vector3 m_startPosition{0, 0, 0};
+    Vector3 m_position{0, 0, 0};
+    Quaternion m_rotation{0, 0, 0, 1};
+    Vector3 m_velocity{0, 0, 0};
+    Vector3 m_angularVelocity{0, 0, 0};
+    Vector3 m_forces{0, 0, 0};
+    Vector3 m_size{1, 1, 1};
     float m_mass = 1.0f;
-    float m_inverseMass = 1.0f;
-    raylib::Matrix m_inertiaTensor = raylib::MatrixIdentity();
     bool m_isStatic = false;
     bool m_active = true;
     bool m_useGravity = true;
-    raylib::Color m_color = WHITE;
+    Color m_color = WHITE;
+    static uint32_t s_nextId;
 };
 
-class Level {
+class ILevel {
 public:
-    virtual ~Level() = default;
+    virtual ~ILevel() = default;
     virtual void Load() = 0;
     virtual void Unload() = 0;
-    virtual void Update(float dt, class TimeRecorder& recorder) = 0;
-    virtual void Draw(const raylib::Camera3D& camera) = 0;
+    virtual void Update(float dt, TimeRecorder& recorder) = 0;
+    virtual void Draw(const Camera3D& camera) = 0;
     virtual void DrawUI() = 0;
     virtual void ProcessInput(float dt, TimeMode mode) = 0;
     virtual bool IsComplete() const = 0;
     virtual void Reset() = 0;
     virtual const char* GetName() const = 0;
     virtual const char* GetHint() const = 0;
-    
     virtual int GetObjectCount() const = 0;
     virtual void GetObjectStates(std::vector<TransformData>& states) const = 0;
     virtual void SetObjectStates(const std::vector<TransformData>& states) = 0;
-    virtual raylib::Vector3 GetPlayerStart() const = 0;
+    virtual Vector3 GetPlayerStart() const = 0;
 };

@@ -1,8 +1,8 @@
 #include "Levels.h"
-#include "raylib-cpp.hpp"
+#include "raylib.h"
 
 void Level1::Load() {
-    Level::Load();
+    LevelBase::Load();
     
     CreateGround(30);
     
@@ -16,14 +16,14 @@ void Level1::Load() {
 }
 
 void Level1::DrawUI() {
-    raylib::DrawText("Press [R] to START/STOP recording", 10, 10, 20, BLACK);
-    raylib::DrawText("Press [P] to START/STOP replay", 10, 35, 20, BLACK);
-    raylib::DrawText("Move with WASD, Jump with SPACE", 10, 60, 20, BLACK);
-    raylib::DrawText("Goal: Reach the green cylinder", 10, 85, 20, DARKGREEN);
+    DrawText("Press [R] to START/STOP recording", 10, 10, 20, BLACK);
+    DrawText("Press [P] to START/STOP replay", 10, 35, 20, BLACK);
+    DrawText("Move with WASD, Jump with SPACE", 10, 60, 20, BLACK);
+    DrawText("Goal: Reach the green cylinder", 10, 85, 20, DARKGREEN);
 }
 
 void Level2::Load() {
-    Level::Load();
+    LevelBase::Load();
     
     CreateGround(25);
     
@@ -37,12 +37,12 @@ void Level2::Load() {
 }
 
 void Level2::DrawUI() {
-    raylib::DrawText("Record the platform swing timing", 10, 10, 20, BLACK);
-    raylib::DrawText("Jump on it during replay to reach goal", 10, 35, 20, BLACK);
+    DrawText("Record the platform swing timing", 10, 10, 20, BLACK);
+    DrawText("Jump on it during replay to reach goal", 10, 35, 20, BLACK);
 }
 
 void Level3::Load() {
-    Level::Load();
+    LevelBase::Load();
     
     CreateGround(20);
     
@@ -59,12 +59,12 @@ void Level3::Load() {
 }
 
 void Level3::DrawUI() {
-    raylib::DrawText("Record boxes falling to create stairs", 10, 10, 20, BLACK);
-    raylib::DrawText("Replay and climb the recorded boxes", 10, 35, 20, BLACK);
+    DrawText("Record boxes falling to create stairs", 10, 10, 20, BLACK);
+    DrawText("Replay and climb the recorded boxes", 10, 35, 20, BLACK);
 }
 
 void Level4::Load() {
-    Level::Load();
+    LevelBase::Load();
     
     CreateGround(30);
     
@@ -80,13 +80,13 @@ void Level4::Load() {
 }
 
 void Level4::DrawUI() {
-    raylib::DrawText("Record first box, replay to reach second", 10, 10, 20, BLACK);
-    raylib::DrawText("Record second box on top of first replay", 10, 35, 20, BLACK);
-    raylib::DrawText("[T] to scrub timeline", 10, 85, 20, BLACK);
+    DrawText("Record first box, replay to reach second", 10, 10, 20, BLACK);
+    DrawText("Record second box on top of first replay", 10, 35, 20, BLACK);
+    DrawText("[T] to scrub timeline", 10, 85, 20, BLACK);
 }
 
 void Level5::Load() {
-    Level::Load();
+    LevelBase::Load();
     
     CreateGround(40);
     
@@ -106,6 +106,6 @@ void Level5::Load() {
 }
 
 void Level5::DrawUI() {
-    raylib::DrawText("FINAL TEST - Use all mechanics!", 10, 10, 20, MAROON);
-    raylib::DrawText("Stack, time, and loop recordings", 10, 35, 20, BLACK);
+    DrawText("FINAL TEST - Use all mechanics!", 10, 10, 20, MAROON);
+    DrawText("Stack, time, and loop recordings", 10, 35, 20, BLACK);
 }

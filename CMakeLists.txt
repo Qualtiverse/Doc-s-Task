@@ -5,46 +5,24 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -g")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-elseif(MSVC)
+if(MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W4 /WX-")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
 endif()
 
-# Raylib configuration
-set(RAYLIB_BUILD_EXAMPLES OFF)
-set(RAYLIB_BUILD_GAMES OFF)
-set(BUILD_SHARED_LIBS OFF)
-
+# Fetch raylib from GitHub
 include(FetchContent)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# Fetch raylib (provides CMake config)
 FetchContent_Declare(
     raylib
     GIT_REPOSITORY https://github.com/raysan5/raylib.git
     GIT_TAG        5.5
 )
 
-# Fetch raylib-cpp (header-only, no CMake config)
-FetchContent_Declare(
-    raylib-cpp
-    GIT_REPOSITORY https://github.com/raylib-cpp/raylib-cpp.git
-    GIT_TAG        5.5.0
-)
+FetchContent_MakeAvailable(raylib)
 
-FetchContent_MakeAvailable(raylib raylib-cpp)
-
-# Find raylib (from FetchContent or system)
-find_package(raylib CONFIG REQUIRED)
-
-# raylib-cpp is header-only - add its source directory to raylib target (header is at root)
-target_include_directories(raylib INTERFACE
-    ${raylib-cpp_SOURCE_DIR}
-)
-
-# Executable - all source files
+# Executable
 add_executable(DocTask
     src/main.cpp
     src/core/CoreTypes.cpp
@@ -70,7 +48,3 @@ add_custom_command(TARGET DocTask POST_BUILD
         $<TARGET_FILE_DIR:DocTask>/assets
     COMMENT "Copying assets to build directory"
 )
-
-# Install target (optional)
-install(TARGETS DocTask DESTINATION bin)
-install(DIRECTORY assets/ DESTINATION share/DocTask/assets)

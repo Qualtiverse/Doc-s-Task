@@ -2,7 +2,7 @@
 
 #include "Level.h"
 
-class Level1 : public Level {
+class Level1 : public LevelBase {
 public:
     void Load() override;
     const char* GetName() const override { return "Level 1: Recording Basics"; }
@@ -10,7 +10,7 @@ public:
     void DrawUI() override;
 };
 
-class Level2 : public Level {
+class Level2 : public LevelBase {
 public:
     void Load() override;
     const char* GetName() const override { return "Level 2: Timing"; }
@@ -18,7 +18,7 @@ public:
     void DrawUI() override;
 };
 
-class Level3 : public Level {
+class Level3 : public LevelBase {
 public:
     void Load() override;
     const char* GetName() const override { return "Level 3: Multi-Object"; }
@@ -26,7 +26,7 @@ public:
     void DrawUI() override;
 };
 
-class Level4 : public Level {
+class Level4 : public LevelBase {
 public:
     void Load() override;
     const char* GetName() const override { return "Level 4: Loop Puzzle"; }
@@ -34,7 +34,7 @@ public:
     void DrawUI() override;
 };
 
-class Level5 : public Level {
+class Level5 : public LevelBase {
 public:
     void Load() override;
     const char* GetName() const override { return "Level 5: Final Test"; }

@@ -1,5 +1,7 @@
 #include "CoreTypes.h"
-#include "raylib-cpp.hpp"
+#include "raylib.h"
+
+uint32_t PhysicsObject::s_nextId = 0;
 
 TimeRecorder::TimeRecorder(int maxFrames) : m_maxFrames(maxFrames) {
     m_frames.reserve(maxFrames);
@@ -100,29 +102,32 @@ void TimeRecorder::Clear() {
     m_currentFrame = 0;
 }
 
-PhysicsObject::PhysicsObject() : m_id(-1), m_active(true), m_dynamic(true), m_mass(1.0f) {
-    m_color = WHITE;
+PhysicsObject::PhysicsObject() : m_id(s_nextId++), m_active(true), m_isStatic(true) {
+    m_color = GRAY;
+    m_startPosition = {0, 0, 0};
 }
 
-PhysicsObject::PhysicsObject(raylib::Vector3 position, raylib::Vector3 size, float mass, bool dynamic)
-    : m_position(position), m_size(size), m_mass(mass), m_dynamic(dynamic), m_active(true) {
+PhysicsObject::PhysicsObject(const Vector3& pos, const Vector3& size, float mass, bool isStatic)
+    : m_id(s_nextId++), m_startPosition(pos), m_position(pos), m_size(size), m_mass(mass), m_isStatic(isStatic), m_active(true) {
     m_rotation = {0, 0, 0, 1};
     m_velocity = {0, 0, 0};
     m_angularVelocity = {0, 0, 0};
-    m_color = raylib::Color{(unsigned char)(50 + rand() % 100), 
+    m_color = Color{(unsigned char)(50 + rand() % 100), 
                            (unsigned char)(100 + rand() % 155), 
                            (unsigned char)(50 + rand() % 100), 255};
 }
 
 void PhysicsObject::Update(float dt) {
-    if (!m_active || !m_dynamic) return;
+    if (!m_active || m_isStatic) return;
     
     if (m_mass > 0) {
-        raylib::Vector3 acceleration = {m_forces.x / m_mass, m_forces.y / m_mass, m_forces.z / m_mass};
+        Vector3 acceleration = {m_forces.x / m_mass, m_forces.y / m_mass, m_forces.z / m_mass};
         m_velocity.x += acceleration.x * dt;
         m_velocity.y += acceleration.y * dt;
         m_velocity.z += acceleration.z * dt;
     }
+    
+    m_velocity.y -= 9.81f * dt;
     
     m_position.x += m_velocity.x * dt;
     m_position.y += m_velocity.y * dt;
@@ -130,24 +135,40 @@ void PhysicsObject::Update(float dt) {
     
     if (m_position.y < 0.5f) {
         m_position.y = 0.5f;
-        if (m_velocity.y < 0) m_velocity.y *= -0.5f;
+        if (m_velocity.y < 0) m_velocity.y *= -0.3f;
     }
     
-    m_velocity.x *= 0.99f;
-    m_velocity.y *= 0.99f;
-    m_velocity.z *= 0.99f;
+    m_velocity.x *= 0.98f;
+    m_velocity.y *= 0.98f;
+    m_velocity.z *= 0.98f;
     
     m_forces = {0, 0, 0};
 }
 
-void PhysicsObject::Draw(const raylib::Camera3D& camera) const {
+void PhysicsObject::Draw() const {
     if (!m_active) return;
     
-    raylib::DrawCube(m_position, m_size.x, m_size.y, m_size.z, m_color);
-    raylib::DrawCubeWires(m_position, m_size.x, m_size.y, m_size.z, BLACK);
+    DrawCube(m_position, m_size.x, m_size.y, m_size.z, m_color);
+    DrawCubeWires(m_position, m_size.x, m_size.y, m_size.z, BLACK);
 }
 
-void PhysicsObject::SetTransform(const TransformData& data) {
+void PhysicsObject::SetPosition(const Vector3& pos) { m_position = pos; }
+void PhysicsObject::SetRotation(const Quaternion& rot) { m_rotation = rot; }
+void PhysicsObject::SetVelocity(const Vector3& vel) { m_velocity = vel; }
+void PhysicsObject::SetAngularVelocity(const Vector3& vel) { m_angularVelocity = vel; }
+
+TransformData PhysicsObject::GetTransformData() const {
+    TransformData data;
+    data.position = m_position;
+    data.rotation = m_rotation;
+    data.velocity = m_velocity;
+    data.angularVelocity = m_angularVelocity;
+    data.valid = m_active;
+    data.objectId = m_id;
+    return data;
+}
+
+void PhysicsObject::SetFromTransformData(const TransformData& data) {
     m_position = data.position;
     m_rotation = data.rotation;
     m_velocity = data.velocity;
@@ -155,20 +176,16 @@ void PhysicsObject::SetTransform(const TransformData& data) {
     m_active = data.valid;
 }
 
-TransformData PhysicsObject::GetTransformData() const {
-    return TransformData(m_position, m_rotation, m_velocity, m_angularVelocity, 0);
-}
-
-void PhysicsObject::ApplyForce(const raylib::Vector3& force) {
-    if (m_dynamic && m_active) {
+void PhysicsObject::ApplyForce(const Vector3& force) {
+    if (!m_isStatic && m_active) {
         m_forces.x += force.x;
         m_forces.y += force.y;
         m_forces.z += force.z;
     }
 }
 
-void PhysicsObject::ApplyImpulse(const raylib::Vector3& impulse) {
-    if (m_dynamic && m_active && m_mass > 0) {
+void PhysicsObject::ApplyImpulse(const Vector3& impulse) {
+    if (!m_isStatic && m_active && m_mass > 0) {
         m_velocity.x += impulse.x / m_mass;
         m_velocity.y += impulse.y / m_mass;
         m_velocity.z += impulse.z / m_mass;

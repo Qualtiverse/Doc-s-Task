@@ -1,11 +1,11 @@
 #include "UIManager.h"
 #include "Level.h"
-#include "raylib-cpp.hpp"
+#include "raylib.h"
 #include <string>
 
 UIManager::UIManager() {}
 
-void UIManager::Update(float dt, GameState state, TimeMode timeMode, TimeRecorder& recorder, Level* level) {
+void UIManager::Update(float dt, GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level) {
     if (m_showHelp) {
         m_helpTimer -= dt;
         if (m_helpTimer <= 0) m_showHelp = false;
@@ -21,7 +21,7 @@ void UIManager::Update(float dt, GameState state, TimeMode timeMode, TimeRecorde
     }
 }
 
-void UIManager::Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder, Level* level, float levelTime) {
+void UIManager::Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime) {
     DrawMainUI(state, timeMode, recorder, level, levelTime);
     
     if (state == GameState::MENU) DrawMenuUI();
@@ -30,10 +30,8 @@ void UIManager::Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder,
     if (m_showHelp) DrawHelpUI();
 }
 
-void UIManager::DrawMainUI(GameState state, TimeMode timeMode, TimeRecorder& recorder, Level* level, float levelTime) {
-    int levelNum = 1;
-    
-    DrawText(TextFormat("Doc's Task - Level %d", levelNum), 20, 20, 28, DARKGRAY);
+void UIManager::DrawMainUI(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime) {
+    DrawText(TextFormat("Doc's Task - Level %d", 1), 20, 20, 28, DARKGRAY);
     DrawText(level ? level->GetName() : "Loading...", 20, 55, 20, DARKGRAY);
     
     DrawModeIndicator(timeMode);
@@ -54,8 +52,6 @@ void UIManager::DrawMainUI(GameState state, TimeMode timeMode, TimeRecorder& rec
     }
     
     DrawControlsHint();
-    
-    DrawFPS(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 30);
 }
 
 void UIManager::DrawModeIndicator(TimeMode mode) {
@@ -86,35 +82,36 @@ void UIManager::DrawTimeline(TimeRecorder& recorder, float levelTime) {
     DrawRectangleLines(timelineX, timelineY, timelineWidth, timelineHeight, DARKGRAY);
     
     int frameCount = recorder.GetFrameCount();
-    for (int i = 0; i < frameCount; i++) {
-        float x = timelineX + (i / (float)std::max(1, frameCount - 1)) * timelineWidth;
-        DrawLine(x, timelineY + 2, x, timelineY + timelineHeight - 2, Fade(LIGHTGRAY, 0.5f));
+    for (int i = 0; i < frameCount && frameCount > 1; i++) {
+        float x = timelineX + (i / (float)(frameCount - 1)) * timelineWidth;
+        DrawLineEx({x, timelineY + 2}, {x, timelineY + timelineHeight - 2}, 1, Fade(LIGHTGRAY, 0.5f));
     }
     
     float progress = levelTime / duration;
-    float progressX = timelineX + progress * timelineWidth;
-    DrawRectangle(timelineX, timelineY, (int)progressX - timelineX, timelineHeight, Fade(BLUE, 0.4f));
-    DrawLineEx({progressX, timelineY}, {progressX, timelineY + timelineHeight}, 3, BLUE);
+    Rectangle progressRect = {timelineX, timelineY, progress * timelineWidth, timelineHeight};
+    DrawRectangleRec(progressRect, Fade(BLUE, 0.4f));
+    DrawLineEx({timelineX + progress * timelineWidth, timelineY}, 
+               {timelineX + progress * timelineWidth, timelineY + timelineHeight}, 3, BLUE);
     
-    if (m_draggingTimeline || CheckCollisionPointRec(GetMousePosition(), {timelineX, timelineY, timelineWidth, timelineHeight})) {
+    Rectangle timelineRect = {timelineX, timelineY, timelineWidth, timelineHeight};
+    if (CheckCollisionPointRec(GetMousePosition(), timelineRect)) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             m_draggingTimeline = true;
         }
         if (m_draggingTimeline) {
             float clickProgress = (GetMouseX() - timelineX) / timelineWidth;
-            clickProgress = std::clamp(clickProgress, 0.0f, 1.0f);
+            clickProgress = Clamp(clickProgress, 0.0f, 1.0f);
             recorder.ScrubToTime(clickProgress * duration);
         }
     }
     
-    DrawText("Click/drag to scrub", timelineX, timelineY - 20, 14, DARKGRAY);
+    DrawText("Click/drag to scrub timeline", timelineX, timelineY - 20, 14, DARKGRAY);
 }
 
 void UIManager::DrawControlsHint() {
-    int y = SCREEN_HEIGHT - 120;
-    DrawText("CONTROLS:", 20, y, 16, DARKGRAY);
-    DrawText("WASD - Move    SPACE - Jump    R - Record/Stop    P - Replay    T - Time Toggle", 20, y + 22, 14, GRAY);
-    DrawText("TAB - Next Level    ESC - Pause/Menu    CTRL+R - Restart    H - Help", 20, y + 42, 14, GRAY);
+    DrawText("CONTROLS:", 20, SCREEN_HEIGHT - 100, 16, DARKGRAY);
+    DrawText("WASD=Move SPACE=Jump R=Record/Stop P=Replay T=TimeToggle", 20, SCREEN_HEIGHT - 78, 14, GRAY);
+    DrawText("TAB=NextLevel ESC=Pause/Menu CTRL+R=Restart H=Help", 20, SCREEN_HEIGHT - 58, 14, GRAY);
 }
 
 void UIManager::DrawMenuUI() {
@@ -129,7 +126,7 @@ void UIManager::DrawMenuUI() {
     DrawText("Record your actions, then replay them", SCREEN_WIDTH/2 - 180, SCREEN_HEIGHT/2 + 70, 20, LIGHTGRAY);
     DrawText("to solve puzzles cooperatively with your past self!", SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 + 100, 20, LIGHTGRAY);
     
-    DrawText("Controls: WASD=Move, SPACE=Jump, R=Record, P=Replay, T=Time Toggle", SCREEN_WIDTH/2 - 220, SCREEN_HEIGHT - 60, 18, GRAY);
+    DrawText("Controls: WASD=Move SPACE=Jump R=Record P=Replay T=TimeToggle", SCREEN_WIDTH/2 - 220, SCREEN_HEIGHT - 60, 18, GRAY);
 }
 
 void UIManager::DrawPauseUI() {
