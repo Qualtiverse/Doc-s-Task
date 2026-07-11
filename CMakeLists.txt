@@ -39,9 +39,9 @@ FetchContent_MakeAvailable(raylib raylib-cpp)
 # Find raylib (from FetchContent or system)
 find_package(raylib CONFIG REQUIRED)
 
-# raylib-cpp is header-only - add its include directory to raylib target
+# raylib-cpp is header-only - add its source directory to raylib target (header is at root)
 target_include_directories(raylib INTERFACE
-    ${raylib-cpp_SOURCE_DIR}/include
+    ${raylib-cpp_SOURCE_DIR}
 )
 
 # Executable - all source files
