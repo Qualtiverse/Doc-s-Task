@@ -7,53 +7,44 @@ on:
 
 jobs:
   build-windows:
-    name: Windows (MinGW)
+    name: Windows (MSYS2 MinGW)
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: pwsh
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MinGW
-        run: |
-          choco install mingw --no-progress -y
-          echo "C:\tools\mingw64\bin" >> $env:GITHUB_PATH
-
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v2
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          cmake-version: '3.28'
-
-      - name: Download raylib binaries
-        run: |
-          $url = "https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_win64_mingw-w64.zip"
-          $zip = "$env:TEMP\raylib.zip"
-          Write-Host "Downloading raylib (MinGW)..."
-          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-          Expand-Archive -Path $zip -DestinationPath raylib-bin -Force
-          $includeDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "include" | Select-Object -First 1
-          Write-Host "RAYLIB_PATH=$($includeDir.Parent.FullName)" >> $env:GITHUB_ENV
-          dir raylib-bin
+          msystem: MINGW64
+          update: true
+          cache: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-raylib
+            mingw-w64-x86_64-ninja
 
       - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"
+        shell: msys2 {0}
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build
-        run: cmake --build build --config Release -- -j$env:NUMBER_OF_PROCESSORS
+        shell: msys2 {0}
+        run: cmake --build build
 
       - name: Verify
+        shell: msys2 {0}
         run: |
-          $exe = "build/DocTask.exe"
-          if (Test-Path $exe) {
-            Write-Host "SUCCESS! Size: $('{0:N2}' -f ((Get-Item $exe).Length/1MB)) MB"
-          } else {
-            Write-Error "Executable not found"
-            Get-ChildItem build -Recurse -Filter "*.exe" | Select-Object FullName, Length
+          if [ -f build/DocTask.exe ]; then
+            echo "SUCCESS!"
+            ls -la build/DocTask.exe
+          else
+            echo "Executable not found"
+            find build -name "*.exe" -type f
             exit 1
-          }
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

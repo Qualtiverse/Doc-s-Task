@@ -3,6 +3,8 @@
 #include "Levels.h"
 #include "UIManager.h"
 #include "raylib.h"
+#include "raymath.h"
+#include <cmath>
 #include <iostream>
 
 GameManager& GameManager::Instance() {

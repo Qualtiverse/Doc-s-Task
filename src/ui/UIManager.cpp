@@ -1,6 +1,7 @@
 #include "UIManager.h"
 #include "Level.h"
 #include "raylib.h"
+#include "raymath.h"
 #include <string>
 
 UIManager::UIManager() {}
