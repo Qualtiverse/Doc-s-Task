@@ -42,7 +42,7 @@ add_executable(DocTask
     src/core/Level.cpp
     src/ui/UIManager.cpp
     src/levels/Levels.cpp
-))
+)
 
 target_include_directories(DocTask PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
