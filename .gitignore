@@ -1,0 +1,54 @@
+# Build artifacts
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.obj
+*.o
+*.pdb
+*.idb
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.opendb
+*.opensdf
+*.sdf
+ipch/
+Debug/
+Release/
+x64/
+x86/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+*.cmake
+!CMakeLists.txt
+!cmake/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Raylib cache
+raylib-*/
+raylib-cpp-*/
+
+# Logs
+*.log
+
+# Assets (keep source, ignore built)
+# assets/ - keep this tracked
