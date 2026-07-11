@@ -4,20 +4,12 @@ project(DocTask LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
-endif()
+set(BUILD_SHARED_LIBS OFF)
+set(RAYLIB_BUILD_EXAMPLES OFF)
+set(RAYLIB_BUILD_GAMES OFF)
 
-# Try to find pre-built raylib first, else build from source
-find_package(raylib CONFIG QUIET)
-
-if(raylib_FOUND)
-    message(STATUS "Found pre-built raylib")
-else()
-    message(STATUS "Building raylib from source")
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    add_subdirectory(raylib-src raylib-build)
-endif()
+# raylib source checked out by workflow to raylib-src/
+add_subdirectory(raylib-src raylib-build)
 
 add_executable(DocTask
     src/main.cpp
