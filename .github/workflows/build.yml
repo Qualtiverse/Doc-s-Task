@@ -29,16 +29,15 @@ jobs:
           Write-Host "Downloading raylib..."
           Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
           Expand-Archive -Path $zip -DestinationPath raylib-bin -Force
-          # Find the actual include/lib dirs
           $includeDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "include" | Select-Object -First 1
-          $libDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "lib" | Select-Object -First 1
           Write-Host "Include: $($includeDir.FullName)"
+          $libDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "lib" | Select-Object -First 1
           Write-Host "Lib: $($libDir.FullName)"
           Write-Host "RAYLIB_PATH=$($includeDir.Parent.FullName)" >> $env:GITHUB_ENV
           Get-ChildItem raylib-bin -Recurse
 
       - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -51,7 +50,7 @@ jobs:
             $size = (Get-Item $exe).Length / 1MB
             Write-Host "Size: $('{0:N2}' -f $size) MB"
           } else {
-            Write-Error "FAILED: executable not found"
+            Write-Host "FAILED: executable not found - checking build output..."
             Get-ChildItem build -Recurse -Filter "*.exe" | Select-Object FullName, Length
             exit 1
           }
