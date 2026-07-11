@@ -1,4 +1,4 @@
-name: Build Doc's Task
+name: Build Doc's Task (Windows)
 
 on:
   push:
@@ -52,97 +52,23 @@ jobs:
           path: build/Release/DocTask.exe
           retention-days: 30
 
-  build-linux:
-    name: Linux (GCC)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev
-
-      - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release --parallel
-
-      - name: Verify executable
-        run: |
-          ls -la build/DocTask
-          file build/DocTask
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DocTask-Linux
-          path: build/DocTask
-          retention-days: 30
-
-  build-macos:
-    name: macOS (Clang)
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: brew install cmake
-
-      - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release --parallel
-
-      - name: Verify executable
-        run: |
-          ls -la build/DocTask
-          file build/DocTask
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DocTask-macOS
-          path: build/DocTask
-          retention-days: 30
-
   release:
     name: Create Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: build-windows
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Download all artifacts
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
+          name: DocTask-Windows
           path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release
-          cp artifacts/DocTask-Windows/DocTask.exe release/DocTask-Windows.exe
-          cp artifacts/DocTask-Linux/DocTask release/DocTask-Linux
-          cp artifacts/DocTask-macOS/DocTask release/DocTask-macOS
-          chmod +x release/DocTask-Linux release/DocTask-macOS
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            release/DocTask-Windows.exe
-            release/DocTask-Linux
-            release/DocTask-macOS
+          files: artifacts/DocTask.exe
           generate_release_notes: true
