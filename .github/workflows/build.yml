@@ -14,54 +14,49 @@ jobs:
         shell: pwsh
 
     steps:
-      - name: Checkout DocTask
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout raylib
-        uses: actions/checkout@v4
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
         with:
-          repository: raysan5/raylib
-          path: raylib-src
-          ref: 5.5
+          cmake-version: '3.28'
 
-      - name: Show directory structure
+      - name: Download raylib binaries
         run: |
-          Write-Host "=== Workspace ==="
-          Get-ChildItem
-          Write-Host "=== raylib-src ==="
-          if (Test-Path raylib-src) { Get-ChildItem raylib-src } else { Write-Error "raylib-src NOT FOUND" }
-          Write-Host "=== CMake version ==="
-          cmake --version
+          $url = "https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_win64_msvc16.zip"
+          $zip = "$env:TEMP\raylib.zip"
+          Write-Host "Downloading raylib..."
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Expand-Archive -Path $zip -DestinationPath raylib-bin -Force
+          # Find the actual include/lib dirs
+          $includeDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "include" | Select-Object -First 1
+          $libDir = Get-ChildItem raylib-bin -Recurse -Directory -Filter "lib" | Select-Object -First 1
+          Write-Host "Include: $($includeDir.FullName)"
+          Write-Host "Lib: $($libDir.FullName)"
+          Write-Host "RAYLIB_PATH=$($includeDir.Parent.FullName)" >> $env:GITHUB_ENV
+          Get-ChildItem raylib-bin -Recurse
 
       - name: Configure
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release 2>&1
-        continue-on-error: true
-
-      - name: Show CMake error output
-        if: failure()
-        run: |
-          if (Test-Path "build/CMakeFiles/CMakeOutput.log") { Get-Content "build/CMakeFiles/CMakeOutput.log" -Tail 30 }
-          if (Test-Path "build/CMakeFiles/CMakeError.log") { Get-Content "build/CMakeFiles/CMakeError.log" -Tail 30 }
-          Write-Host "Last error: $($Error[0])"
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --parallel 2>&1
-        continue-on-error: true
+        run: cmake --build build --config Release --parallel
 
       - name: Verify
         run: |
           $exe = "build\Release\DocTask.exe"
           if (Test-Path $exe) {
-            Write-Host "SUCCESS: $exe found"
+            Write-Host "SUCCESS: $exe"
             $size = (Get-Item $exe).Length / 1MB
             Write-Host "Size: $('{0:N2}' -f $size) MB"
           } else {
             Write-Error "FAILED: executable not found"
+            Get-ChildItem build -Recurse -Filter "*.exe" | Select-Object FullName, Length
             exit 1
           }
 
       - name: Upload artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: DocTask-Windows
