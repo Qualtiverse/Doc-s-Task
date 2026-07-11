@@ -135,8 +135,8 @@ void UIManager::DrawMenuUI() {
     DrawRectangleRounded({(float)(SCREEN_WIDTH/2 - 120), cyf, 240, 44}, 0.3f, 8, ColorAlpha(BLUE, 0.8f));
     DrawText("[E]  LEVEL EDITOR", SCREEN_WIDTH/2 - 85, (int)cyf + 10, 18, WHITE);
     
-    DrawText("Record physics, replay time,", SCREEN_WIDTH/2 - 150, cy + 70, 18, LIGHTGRAY);
-    DrawText("solve puzzles with your past self!", SCREEN_WIDTH/2 - 160, cy + 95, 18, LIGHTGRAY);
+    DrawText("Record physics, replay time,", SCREEN_WIDTH/2 - 150, (int)cyf + 70, 18, LIGHTGRAY);
+    DrawText("solve puzzles with your past self!", SCREEN_WIDTH/2 - 160, (int)cyf + 95, 18, LIGHTGRAY);
     
     DrawText("WASD=Move SPACE=Jump R=Record P=Replay", SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT - 40, 16, GRAY);
 }

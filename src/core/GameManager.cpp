@@ -69,6 +69,9 @@ void GameManager::Shutdown() {
 }
 
 void GameManager::ChangeState(GameState newState) {
+    if (m_state == GameState::BUILDING && newState != GameState::BUILDING) {
+        ShowCursor();
+    }
     m_state = newState;
     if (newState == GameState::PLAYING) {
         m_recorder.StopReplay();
@@ -109,10 +112,20 @@ void GameManager::Update(float dt) {
     }
     
     if (m_state == GameState::BUILDING) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            ShowCursor();
+            m_state = GameState::MENU;
+            return;
+        }
         UpdateBuildMode(dt);
-        UpdatePlayer(dt);
         m_ui->Update(dt, m_state, m_timeMode, m_recorder, m_levels[m_currentLevelIndex].get());
-        UpdateCamera(dt);
+        Vector3 forward;
+        forward.x = cosf(m_buildCamPitch) * sinf(m_buildCamYaw);
+        forward.y = sinf(m_buildCamPitch);
+        forward.z = cosf(m_buildCamPitch) * cosf(m_buildCamYaw);
+        m_camera.position = m_buildCamPos;
+        m_camera.target = Vector3Add(m_buildCamPos, forward);
+        m_camera.up = {0, 1, 0};
         return;
     }
     
@@ -243,11 +256,9 @@ void GameManager::Draw() {
         DrawGrid(40, 1.0f);
         DrawBuildMode();
         EndMode3D();
-        DrawPlayer();
         m_ui->Draw(m_state, m_timeMode, m_recorder, level, m_levelTime);
     } else {
         LevelBase* level = m_levels[m_currentLevelIndex].get();
-        
         BeginMode3D(m_camera);
         if (level) level->Draw(m_camera);
         DrawGrid(20, 1.0f);
@@ -362,7 +373,8 @@ void GameManager::EnterBuildMode() {
     LevelBase* level = m_levels[m_currentLevelIndex].get();
     if (level) {
         level->Load();
-        m_playerPosition = level->GetPlayerStart();
+        Vector3 ps = level->GetPlayerStart();
+        m_buildCamPos = Vector3Add(ps, Vector3{8, 8, 8});
         strncpy(m_levelNameBuf, level->EditorGetLevelName().c_str(), sizeof(m_levelNameBuf)-1);
         m_levelNameBuf[sizeof(m_levelNameBuf)-1] = 0;
         m_levelNameLen = (int)strlen(m_levelNameBuf);
@@ -370,13 +382,14 @@ void GameManager::EnterBuildMode() {
         m_levelHintBuf[sizeof(m_levelHintBuf)-1] = 0;
         m_levelHintLen = (int)strlen(m_levelHintBuf);
     }
-    m_cameraTarget = m_playerPosition;
-    m_cameraTarget.y += 1.0f;
-    m_playerVelocity = {0,0,0};
-    m_playerOnGround = true;
+    m_buildCamYaw = 0.8f;
+    m_buildCamPitch = -0.5f;
+    m_buildCamSpeed = 12.0f;
+    HideCursor();
 }
 
 void GameManager::ExitBuildMode() {
+    ShowCursor();
     LevelBase* level = m_levels[m_currentLevelIndex].get();
     if (level) {
         level->Reset();
@@ -436,7 +449,40 @@ void GameManager::UpdateBuildMode(float dt) {
     LevelBase* level = m_levels[m_currentLevelIndex].get();
     if (!level) return;
 
-    // Text input for name/hint
+    // --- Free-flying camera ---
+    if (!m_editingNameField && !m_editingHintField) {
+        // Build direction vectors from yaw/pitch
+        float yaw = m_buildCamYaw;
+        float pitch = m_buildCamPitch;
+        Vector3 forward = { cosf(pitch)*sinf(yaw), sinf(pitch), cosf(pitch)*cosf(yaw) };
+        Vector3 flatFwd = { sinf(yaw), 0, cosf(yaw) };
+        Vector3 right = { sinf(yaw - PI/2), 0, cosf(yaw - PI/2) };
+        Vector3 up = { 0, 1, 0 };
+
+        // Mouse look (right-click drag)
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+            Vector2 delta = GetMouseDelta();
+            m_buildCamYaw -= delta.x * 0.004f;
+            m_buildCamPitch += delta.y * 0.004f;
+            m_buildCamPitch = Clamp(m_buildCamPitch, -1.5f, 1.5f);
+        }
+
+        // WASD movement (relative to camera)
+        float speed = m_buildCamSpeed * dt;
+        if (IsKeyDown(KEY_LEFT_SHIFT)) speed *= 3.0f;
+        if (IsKeyDown(KEY_W)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(flatFwd, speed));
+        if (IsKeyDown(KEY_S)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(flatFwd, -speed));
+        if (IsKeyDown(KEY_D)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(right, speed));
+        if (IsKeyDown(KEY_A)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(right, -speed));
+        if (IsKeyDown(KEY_E)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(up, speed));
+        if (IsKeyDown(KEY_Q)) m_buildCamPos = Vector3Add(m_buildCamPos, Vector3Scale(up, -speed));
+
+        // Scroll to adjust speed
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0) m_buildCamSpeed = Clamp(m_buildCamSpeed + wheel * 2.0f, 1.0f, 80.0f);
+    }
+
+    // --- Text input for name/hint ---
     if (m_editingNameField) {
         int key = GetCharPressed();
         while (key > 0) {
@@ -472,7 +518,7 @@ void GameManager::UpdateBuildMode(float dt) {
         }
     }
 
-    // Tool switching
+    // --- Tool switching ---
     if (IsKeyPressed(KEY_ONE)) m_buildTool = BuildTool::PLACE_STATIC;
     if (IsKeyPressed(KEY_TWO)) m_buildTool = BuildTool::PLACE_DYNAMIC;
     if (IsKeyPressed(KEY_THREE)) m_buildTool = BuildTool::SET_PLAYER;
@@ -480,21 +526,20 @@ void GameManager::UpdateBuildMode(float dt) {
     if (IsKeyPressed(KEY_FIVE)) m_buildTool = BuildTool::DELETE;
     if (IsKeyPressed(KEY_SIX)) m_buildTool = BuildTool::SELECT;
 
-    // Snap
+    // --- Snap ---
     if (IsKeyPressed(KEY_COMMA)) m_buildSnap = fmaxf(0.25f, m_buildSnap * 0.5f);
     if (IsKeyPressed(KEY_PERIOD)) m_buildSnap = fminf(4.0f, m_buildSnap * 2.0f);
 
-    // Toggle palette / help
-    if (IsKeyPressed(KEY_F)) m_showBuildPalette = !m_showBuildPalette;
+    // --- Toggle help ---
     if (IsKeyPressed(KEY_H)) m_ui->ToggleHelp();
 
-    // Switch to play mode (test level)
+    // --- Switch to play mode (test level) ---
     if (IsKeyPressed(KEY_TAB)) {
         ExitBuildMode();
         return;
     }
 
-    // Save / Load
+    // --- Save / Load ---
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
         if (IsKeyPressed(KEY_S)) {
             level->EditorSetLevelName(m_levelNameBuf);
@@ -507,9 +552,6 @@ void GameManager::UpdateBuildMode(float dt) {
         if (IsKeyPressed(KEY_L)) {
             if (level->EditorLoadFromFile("level.lvl")) {
                 SetStatusMsg("Level loaded from level.lvl");
-                m_playerPosition = level->GetPlayerStart();
-                m_cameraTarget = m_playerPosition;
-                m_cameraTarget.y += 1.0f;
                 strncpy(m_levelNameBuf, level->EditorGetLevelName().c_str(), sizeof(m_levelNameBuf)-1);
                 m_levelNameBuf[sizeof(m_levelNameBuf)-1] = 0;
                 m_levelNameLen = (int)strlen(m_levelNameBuf);
@@ -522,85 +564,84 @@ void GameManager::UpdateBuildMode(float dt) {
         }
     }
 
-    // Mouse interaction
-    Vector2 mp = GetMousePosition();
-    bool uiHover = mp.x < 280;
+    // --- Mouse interaction (only when not right-click-dragging camera) ---
+    if (!IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        Vector2 mp = GetMousePosition();
+        bool uiHover = mp.x < 280;
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
-        // Click on name/hint fields in UI area
-        if (mp.x < 550 && mp.y > 10 && mp.y < 100) {
-            Rectangle nameRect = {280, 30, 240, 24};
-            Rectangle hintRect = {280, 76, 240, 24};
-            if (CheckCollisionPointRec(mp, nameRect)) {
-                m_editingNameField = true; m_editingHintField = false;
-                return;
-            }
-            if (CheckCollisionPointRec(mp, hintRect)) {
-                m_editingHintField = true; m_editingNameField = false;
-                return;
-            }
-            m_editingNameField = false; m_editingHintField = false;
-            return;
-        }
-        // Click mode buttons
-        if (mp.x >= 280 && mp.x <= 520) {
-            for (int i = 0; i < 6; i++) {
-                int by = 125 + i * 26;
-                if (mp.y >= by && mp.y <= by + 24) {
-                    m_buildTool = (BuildTool)i;
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
+            // Click on name/hint fields in UI area
+            if (mp.x < 550 && mp.y > 10 && mp.y < 100) {
+                Rectangle nameRect = {280, 30, 240, 24};
+                Rectangle hintRect = {280, 76, 240, 24};
+                if (CheckCollisionPointRec(mp, nameRect)) {
+                    m_editingNameField = true; m_editingHintField = false;
                     return;
+                }
+                if (CheckCollisionPointRec(mp, hintRect)) {
+                    m_editingHintField = true; m_editingNameField = false;
+                    return;
+                }
+                m_editingNameField = false; m_editingHintField = false;
+                return;
+            }
+            // Click mode buttons
+            if (mp.x >= 280 && mp.x <= 520) {
+                for (int i = 0; i < 6; i++) {
+                    int by = 125 + i * 26;
+                    if (mp.y >= by && mp.y <= by + 24) {
+                        m_buildTool = (BuildTool)i;
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
+            Vector3 gp = GetMouseGroundPos();
+
+            if (m_buildTool == BuildTool::PLACE_STATIC || m_buildTool == BuildTool::PLACE_DYNAMIC) {
+                gp.y = 0.5f;
+                Color c = m_buildTool == BuildTool::PLACE_STATIC ?
+                    (Color){120,120,130,255} : (Color){220,60,60,255};
+                int idx = level->EditorAddObject(gp, Vector3{m_buildSnap,m_buildSnap,m_buildSnap},
+                    m_buildTool == BuildTool::PLACE_STATIC ? 0 : 3.0f,
+                    m_buildTool == BuildTool::PLACE_STATIC, c);
+                m_selectedObject = idx;
+                SetStatusMsg("Placed object");
+            }
+            else if (m_buildTool == BuildTool::SET_PLAYER) {
+                gp.y = 2.0f;
+                level->EditorSetPlayerStart(gp);
+                SetStatusMsg("Player start set");
+            }
+            else if (m_buildTool == BuildTool::SET_GOAL) {
+                gp.y = 1.0f;
+                level->EditorSetGoal(gp, 1.5f);
+                SetStatusMsg("Goal set");
+            }
+            else if (m_buildTool == BuildTool::DELETE) {
+                int picked = PickObject();
+                if (picked >= 0) {
+                    level->EditorRemoveObject(picked);
+                    m_selectedObject = -1;
+                    SetStatusMsg("Deleted object");
+                }
+            }
+            else if (m_buildTool == BuildTool::SELECT) {
+                int picked = PickObject();
+                m_selectedObject = picked;
+                if (picked >= 0) {
+                    char buf[64]; snprintf(buf, sizeof(buf), "Selected object %d", picked);
+                    SetStatusMsg(buf);
+                } else {
+                    SetStatusMsg("Nothing selected");
                 }
             }
         }
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
-        Vector3 gp = GetMouseGroundPos();
-
-        if (m_buildTool == BuildTool::PLACE_STATIC || m_buildTool == BuildTool::PLACE_DYNAMIC) {
-            gp.y = 0.5f;
-            Color c = m_buildTool == BuildTool::PLACE_STATIC ?
-                (Color){120,120,130,255} : (Color){220,60,60,255};
-            int idx = level->EditorAddObject(gp, Vector3{m_buildSnap,m_buildSnap,m_buildSnap},
-                m_buildTool == BuildTool::PLACE_STATIC ? 0 : 3.0f,
-                m_buildTool == BuildTool::PLACE_STATIC, c);
-            m_selectedObject = idx;
-            SetStatusMsg("Placed object");
-        }
-        else if (m_buildTool == BuildTool::SET_PLAYER) {
-            gp.y = 2.0f;
-            level->EditorSetPlayerStart(gp);
-            m_playerPosition = gp;
-            m_cameraTarget = m_playerPosition;
-            m_cameraTarget.y += 1.0f;
-            SetStatusMsg("Player start set");
-        }
-        else if (m_buildTool == BuildTool::SET_GOAL) {
-            gp.y = 1.0f;
-            level->EditorSetGoal(gp, 1.5f);
-            SetStatusMsg("Goal set");
-        }
-        else if (m_buildTool == BuildTool::DELETE) {
-            int picked = PickObject();
-            if (picked >= 0) {
-                level->EditorRemoveObject(picked);
-                m_selectedObject = -1;
-                SetStatusMsg("Deleted object");
-            }
-        }
-        else if (m_buildTool == BuildTool::SELECT) {
-            int picked = PickObject();
-            m_selectedObject = picked;
-            if (picked >= 0) {
-                char buf[64]; snprintf(buf, sizeof(buf), "Selected object %d", picked);
-                SetStatusMsg(buf);
-            } else {
-                SetStatusMsg("Nothing selected");
-            }
-        }
-    }
-
-    // Modify selected object
+    // --- Modify selected object ---
     if (m_selectedObject >= 0 && m_selectedObject < level->GetObjectCount()) {
         auto* obj = level->EditorGetObject(m_selectedObject);
         if (obj) {
@@ -641,8 +682,6 @@ void GameManager::UpdateBuildMode(float dt) {
             }
         }
     }
-
-    // Hide help if text editing — called from DrawBuildMode's status area
 }
 
 void GameManager::DrawBuildMode() {

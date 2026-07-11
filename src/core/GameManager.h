@@ -84,5 +84,11 @@ private:
     bool m_editingHintField = false;
     bool m_showBuildPalette = true;
     
+    // Source-style free-flying camera
+    Vector3 m_buildCamPos{10, 12, 10};
+    float m_buildCamYaw = 0.8f;
+    float m_buildCamPitch = -0.5f;
+    float m_buildCamSpeed = 12.0f;
+    
     std::unique_ptr<UIManager> m_ui;
 };
