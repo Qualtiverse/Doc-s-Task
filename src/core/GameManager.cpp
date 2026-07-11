@@ -5,7 +5,13 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <cmath>
+#include <cstring>
+#include <cstdio>
 #include <iostream>
+
+// Forward declarations for status message helpers
+void SetStatusMsg(const char* msg);
+void DrawStatusMsg();
 
 GameManager& GameManager::Instance() {
     static GameManager instance;
@@ -33,7 +39,11 @@ bool GameManager::Initialize() {
     m_levels.push_back(std::make_unique<Level4>());
     m_levels.push_back(std::make_unique<Level5>());
     
-    LoadLevel(0);
+    strncpy(m_levelNameBuf, "My Level", sizeof(m_levelNameBuf)-1);
+    m_levelNameBuf[sizeof(m_levelNameBuf)-1] = 0;
+    m_levelNameLen = (int)strlen(m_levelNameBuf);
+    m_levelHintBuf[0] = 0;
+    m_levelHintLen = 0;
     
     return true;
 }
@@ -93,9 +103,16 @@ void GameManager::NextLevel() {
 
 void GameManager::Update(float dt) {
     if (m_state == GameState::MENU) {
-        if (IsKeyPressed(KEY_ENTER)) {
-            LoadLevel(0);
-        }
+        if (IsKeyPressed(KEY_ENTER)) LoadLevel(0);
+        if (IsKeyPressed(KEY_E)) EnterBuildMode();
+        return;
+    }
+    
+    if (m_state == GameState::BUILDING) {
+        UpdateBuildMode(dt);
+        UpdatePlayer(dt);
+        m_ui->Update(dt, m_state, m_timeMode, m_recorder, m_levels[m_currentLevelIndex].get());
+        UpdateCamera(dt);
         return;
     }
     
@@ -110,8 +127,11 @@ void GameManager::Update(float dt) {
     
     if (m_state == GameState::PAUSED) return;
     
-    if (IsKeyPressed(KEY_TAB)) {
-        NextLevel();
+    if (IsKeyPressed(KEY_TAB) && m_state != GameState::LEVEL_COMPLETE) {
+        if (m_state == GameState::PLAYING || m_state == GameState::RECORDING || m_state == GameState::REPLAYING) {
+            EnterBuildMode();
+            return;
+        }
     }
     
     if (IsKeyPressed(KEY_R) && IsKeyDown(KEY_LEFT_CONTROL)) {
@@ -216,6 +236,15 @@ void GameManager::Draw() {
     
     if (m_state == GameState::MENU) {
         m_ui->Draw(m_state, m_timeMode, m_recorder, nullptr, m_levelTime);
+    } else if (m_state == GameState::BUILDING) {
+        LevelBase* level = m_levels[m_currentLevelIndex].get();
+        BeginMode3D(m_camera);
+        if (level) level->Draw(m_camera);
+        DrawGrid(40, 1.0f);
+        DrawBuildMode();
+        EndMode3D();
+        DrawPlayer();
+        m_ui->Draw(m_state, m_timeMode, m_recorder, level, m_levelTime);
     } else {
         LevelBase* level = m_levels[m_currentLevelIndex].get();
         
@@ -223,10 +252,11 @@ void GameManager::Draw() {
         if (level) level->Draw(m_camera);
         DrawGrid(20, 1.0f);
         EndMode3D();
-        
+        DrawPlayer();
         m_ui->Draw(m_state, m_timeMode, m_recorder, level, m_levelTime);
     }
     
+    DrawStatusMsg();
     EndDrawing();
 }
 
@@ -286,9 +316,11 @@ void GameManager::UpdatePlayer(float dt) {
     m_cameraTarget = m_playerPosition;
     m_cameraTarget.y += 1.0f;
     
-    LevelBase* level = m_levels[m_currentLevelIndex].get();
-    if (level && level->CheckGoal(m_playerPosition)) {
-        ChangeState(GameState::LEVEL_COMPLETE);
+    if (m_state != GameState::BUILDING) {
+        LevelBase* level = m_levels[m_currentLevelIndex].get();
+        if (level && level->CheckPlayerGoal(m_playerPosition)) {
+            ChangeState(GameState::LEVEL_COMPLETE);
+        }
     }
 }
 
@@ -318,5 +350,352 @@ void GameManager::PushObjects(LevelBase* level) {
             states[i].velocity.z += dz * pushForce * FIXED_TIMESTEP;
         }
         level->SetObjectStates(states);
+    }
+}
+
+void GameManager::EnterBuildMode() {
+    m_state = GameState::BUILDING;
+    m_buildTool = BuildTool::PLACE_STATIC;
+    m_selectedObject = -1;
+    m_showBuildPalette = true;
+    
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (level) {
+        level->Load();
+        m_playerPosition = level->GetPlayerStart();
+        strncpy(m_levelNameBuf, level->EditorGetLevelName().c_str(), sizeof(m_levelNameBuf)-1);
+        m_levelNameBuf[sizeof(m_levelNameBuf)-1] = 0;
+        m_levelNameLen = (int)strlen(m_levelNameBuf);
+        strncpy(m_levelHintBuf, level->EditorGetLevelHint().c_str(), sizeof(m_levelHintBuf)-1);
+        m_levelHintBuf[sizeof(m_levelHintBuf)-1] = 0;
+        m_levelHintLen = (int)strlen(m_levelHintBuf);
+    }
+    m_cameraTarget = m_playerPosition;
+    m_cameraTarget.y += 1.0f;
+    m_playerVelocity = {0,0,0};
+    m_playerOnGround = true;
+}
+
+void GameManager::ExitBuildMode() {
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (level) {
+        level->Reset();
+    }
+    m_playerPosition = m_levels[m_currentLevelIndex]->GetPlayerStart();
+    m_recorder.Clear();
+    ChangeState(GameState::PLAYING);
+}
+
+Vector3 GameManager::GetMouseGroundPos() {
+    Vector2 mp = GetMousePosition();
+    Ray ray = GetMouseRay(mp, m_camera);
+    if (ray.direction.y == 0) return m_playerPosition;
+    float t = -ray.position.y / ray.direction.y;
+    if (t < 0) return m_playerPosition;
+    Vector3 p = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+    p.y = 0;
+    p.x = roundf(p.x / m_buildSnap) * m_buildSnap;
+    p.z = roundf(p.z / m_buildSnap) * m_buildSnap;
+    return p;
+}
+
+int GameManager::PickObject() {
+    Vector2 mp = GetMousePosition();
+    Ray ray = GetMouseRay(mp, m_camera);
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (!level) return -1;
+    float bestT = 1e9f;
+    int best = -1;
+    for (int i = 0; i < level->GetObjectCount(); i++) {
+        auto* obj = level->EditorGetObject(i);
+        if (!obj) continue;
+        Vector3 half = Vector3Scale(obj->GetSize(), 0.5f);
+        Vector3 min = Vector3Subtract(obj->GetPosition(), half);
+        Vector3 max = Vector3Add(obj->GetPosition(), half);
+        float tmin = -1e9f, tmax = 1e9f;
+        for (int a = 0; a < 3; a++) {
+            float* ro = (float*)&ray.position;
+            float* rd = (float*)&ray.direction;
+            float* bmin = (float*)&min;
+            float* bmax = (float*)&max;
+            float invD = 1.0f / rd[a];
+            float t0 = (bmin[a] - ro[a]) * invD;
+            float t1 = (bmax[a] - ro[a]) * invD;
+            if (invD < 0) { float tmp = t0; t0 = t1; t1 = tmp; }
+            if (t0 > tmin) tmin = t0;
+            if (t1 < tmax) tmax = t1;
+            if (tmin > tmax) goto skip;
+        }
+        if (tmin > 0 && tmin < bestT) { bestT = tmin; best = i; }
+        skip:;
+    }
+    return best;
+}
+
+void GameManager::UpdateBuildMode(float dt) {
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (!level) return;
+
+    // Text input for name/hint
+    if (m_editingNameField) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if (key >= 32 && key < 127 && m_levelNameLen < 254) {
+                m_levelNameBuf[m_levelNameLen++] = (char)key;
+                m_levelNameBuf[m_levelNameLen] = 0;
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && m_levelNameLen > 0) {
+            m_levelNameBuf[--m_levelNameLen] = 0;
+        }
+        if (IsKeyPressed(KEY_ENTER)) {
+            m_editingNameField = false;
+            level->EditorSetLevelName(m_levelNameBuf);
+        }
+    }
+    if (m_editingHintField) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if (key >= 32 && key < 127 && m_levelHintLen < 510) {
+                m_levelHintBuf[m_levelHintLen++] = (char)key;
+                m_levelHintBuf[m_levelHintLen] = 0;
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && m_levelHintLen > 0) {
+            m_levelHintBuf[--m_levelHintLen] = 0;
+        }
+        if (IsKeyPressed(KEY_ENTER)) {
+            m_editingHintField = false;
+            level->EditorSetLevelHint(m_levelHintBuf);
+        }
+    }
+
+    // Tool switching
+    if (IsKeyPressed(KEY_ONE)) m_buildTool = BuildTool::PLACE_STATIC;
+    if (IsKeyPressed(KEY_TWO)) m_buildTool = BuildTool::PLACE_DYNAMIC;
+    if (IsKeyPressed(KEY_THREE)) m_buildTool = BuildTool::SET_PLAYER;
+    if (IsKeyPressed(KEY_FOUR)) m_buildTool = BuildTool::SET_GOAL;
+    if (IsKeyPressed(KEY_FIVE)) m_buildTool = BuildTool::DELETE;
+    if (IsKeyPressed(KEY_SIX)) m_buildTool = BuildTool::SELECT;
+
+    // Snap
+    if (IsKeyPressed(KEY_COMMA)) m_buildSnap = fmaxf(0.25f, m_buildSnap * 0.5f);
+    if (IsKeyPressed(KEY_PERIOD)) m_buildSnap = fminf(4.0f, m_buildSnap * 2.0f);
+
+    // Toggle palette / help
+    if (IsKeyPressed(KEY_F)) m_showBuildPalette = !m_showBuildPalette;
+    if (IsKeyPressed(KEY_H)) m_ui->ToggleHelp();
+
+    // Switch to play mode (test level)
+    if (IsKeyPressed(KEY_TAB)) {
+        ExitBuildMode();
+        return;
+    }
+
+    // Save / Load
+    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
+        if (IsKeyPressed(KEY_S)) {
+            level->EditorSetLevelName(m_levelNameBuf);
+            level->EditorSetLevelHint(m_levelHintBuf);
+            if (level->EditorSaveToFile("level.lvl"))
+                SetStatusMsg("Level saved to level.lvl");
+            else
+                SetStatusMsg("Failed to save!");
+        }
+        if (IsKeyPressed(KEY_L)) {
+            if (level->EditorLoadFromFile("level.lvl")) {
+                SetStatusMsg("Level loaded from level.lvl");
+                m_playerPosition = level->GetPlayerStart();
+                m_cameraTarget = m_playerPosition;
+                m_cameraTarget.y += 1.0f;
+                strncpy(m_levelNameBuf, level->EditorGetLevelName().c_str(), sizeof(m_levelNameBuf)-1);
+                m_levelNameBuf[sizeof(m_levelNameBuf)-1] = 0;
+                m_levelNameLen = (int)strlen(m_levelNameBuf);
+                strncpy(m_levelHintBuf, level->EditorGetLevelHint().c_str(), sizeof(m_levelHintBuf)-1);
+                m_levelHintBuf[sizeof(m_levelHintBuf)-1] = 0;
+                m_levelHintLen = (int)strlen(m_levelHintBuf);
+            } else {
+                SetStatusMsg("Failed to load!");
+            }
+        }
+    }
+
+    // Mouse interaction
+    Vector2 mp = GetMousePosition();
+    bool uiHover = mp.x < 280;
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
+        // Click on name/hint fields in UI area
+        if (mp.x < 550 && mp.y > 10 && mp.y < 100) {
+            Rectangle nameRect = {280, 30, 240, 24};
+            Rectangle hintRect = {280, 76, 240, 24};
+            if (CheckCollisionPointRec(mp, nameRect)) {
+                m_editingNameField = true; m_editingHintField = false;
+                return;
+            }
+            if (CheckCollisionPointRec(mp, hintRect)) {
+                m_editingHintField = true; m_editingNameField = false;
+                return;
+            }
+            m_editingNameField = false; m_editingHintField = false;
+            return;
+        }
+        // Click mode buttons
+        if (mp.x >= 280 && mp.x <= 520) {
+            for (int i = 0; i < 6; i++) {
+                int by = 125 + i * 26;
+                if (mp.y >= by && mp.y <= by + 24) {
+                    m_buildTool = (BuildTool)i;
+                    return;
+                }
+            }
+        }
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !uiHover) {
+        Vector3 gp = GetMouseGroundPos();
+
+        if (m_buildTool == BuildTool::PLACE_STATIC || m_buildTool == BuildTool::PLACE_DYNAMIC) {
+            gp.y = 0.5f;
+            Color c = m_buildTool == BuildTool::PLACE_STATIC ?
+                (Color){120,120,130,255} : (Color){220,60,60,255};
+            int idx = level->EditorAddObject(gp, Vector3{m_buildSnap,m_buildSnap,m_buildSnap},
+                m_buildTool == BuildTool::PLACE_STATIC ? 0 : 3.0f,
+                m_buildTool == BuildTool::PLACE_STATIC, c);
+            m_selectedObject = idx;
+            SetStatusMsg("Placed object");
+        }
+        else if (m_buildTool == BuildTool::SET_PLAYER) {
+            gp.y = 2.0f;
+            level->EditorSetPlayerStart(gp);
+            m_playerPosition = gp;
+            m_cameraTarget = m_playerPosition;
+            m_cameraTarget.y += 1.0f;
+            SetStatusMsg("Player start set");
+        }
+        else if (m_buildTool == BuildTool::SET_GOAL) {
+            gp.y = 1.0f;
+            level->EditorSetGoal(gp, 1.5f);
+            SetStatusMsg("Goal set");
+        }
+        else if (m_buildTool == BuildTool::DELETE) {
+            int picked = PickObject();
+            if (picked >= 0) {
+                level->EditorRemoveObject(picked);
+                m_selectedObject = -1;
+                SetStatusMsg("Deleted object");
+            }
+        }
+        else if (m_buildTool == BuildTool::SELECT) {
+            int picked = PickObject();
+            m_selectedObject = picked;
+            if (picked >= 0) {
+                char buf[64]; snprintf(buf, sizeof(buf), "Selected object %d", picked);
+                SetStatusMsg(buf);
+            } else {
+                SetStatusMsg("Nothing selected");
+            }
+        }
+    }
+
+    // Modify selected object
+    if (m_selectedObject >= 0 && m_selectedObject < level->GetObjectCount()) {
+        auto* obj = level->EditorGetObject(m_selectedObject);
+        if (obj) {
+            Vector3 pos = obj->GetPosition();
+            Vector3 size = obj->GetSize();
+            bool changed = false;
+
+            if (IsKeyPressed(KEY_KP_ADD) || IsKeyPressed(KEY_EQUAL)) {
+                size.x += m_buildSnap; size.y += m_buildSnap; size.z += m_buildSnap;
+                changed = true;
+            }
+            if (IsKeyPressed(KEY_KP_SUBTRACT) || IsKeyPressed(KEY_MINUS)) {
+                size.x = fmaxf(0.5f, size.x - m_buildSnap);
+                size.y = fmaxf(0.5f, size.y - m_buildSnap);
+                size.z = fmaxf(0.5f, size.z - m_buildSnap);
+                changed = true;
+            }
+
+            float moveAmt = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1f : 0.5f;
+            if (IsKeyDown(KEY_UP)) { pos.z -= moveAmt; changed = true; }
+            if (IsKeyDown(KEY_DOWN)) { pos.z += moveAmt; changed = true; }
+            if (IsKeyDown(KEY_LEFT)) { pos.x -= moveAmt; changed = true; }
+            if (IsKeyDown(KEY_RIGHT)) { pos.x += moveAmt; changed = true; }
+            if (IsKeyDown(KEY_PAGE_UP)) { pos.y += moveAmt; changed = true; }
+            if (IsKeyDown(KEY_PAGE_DOWN)) { pos.y = fmaxf(0.25f, pos.y - moveAmt); changed = true; }
+
+            if (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE)) {
+                level->EditorRemoveObject(m_selectedObject);
+                m_selectedObject = -1;
+                SetStatusMsg("Deleted");
+                return;
+            }
+
+            if (changed) {
+                obj->SetPosition(pos);
+                obj->SetSize(size);
+                obj->SetStartPosition(pos);
+            }
+        }
+    }
+
+    // Hide help if text editing — called from DrawBuildMode's status area
+}
+
+void GameManager::DrawBuildMode() {
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (!level) return;
+
+    // Ghost object at mouse position
+    if (m_buildTool == BuildTool::PLACE_STATIC || m_buildTool == BuildTool::PLACE_DYNAMIC) {
+        Vector3 ghost = GetMouseGroundPos();
+        ghost.y = 0.5f;
+        Color c = m_buildTool == BuildTool::PLACE_STATIC ?
+            ColorAlpha(GRAY, 0.4f) : ColorAlpha(RED, 0.4f);
+        DrawCube(ghost, m_buildSnap, m_buildSnap, m_buildSnap, c);
+        DrawCubeWires(ghost, m_buildSnap, m_buildSnap, m_buildSnap, ColorAlpha(WHITE, 0.3f));
+    }
+
+    // Highlight selected object
+    if (m_selectedObject >= 0 && m_selectedObject < level->GetObjectCount()) {
+        auto* obj = level->EditorGetObject(m_selectedObject);
+        if (obj) {
+            Vector3 pos = obj->GetPosition();
+            Vector3 size = obj->GetSize();
+            DrawCubeWires(pos, size.x+0.05f, size.y+0.05f, size.z+0.05f, YELLOW);
+            // Draw position handle on top
+            DrawSphere(pos + Vector3{0, size.y*0.5f + 0.3f, 0}, 0.15f, YELLOW);
+        }
+    }
+
+    // Player start marker
+    Vector3 pp = level->GetPlayerStart();
+    DrawCylinder(pp, 0.4f, 0.4f, 1.0f, 8, BLUE);
+    DrawCylinderWires(pp, 0.4f, 0.4f, 1.0f, 8, ColorAlpha(BLUE, 0.5f));
+
+    // Goal marker
+    Vector3 gp = level->GetGoalPos();
+    float gr = level->GetGoalRadius();
+    DrawCylinder(gp, gr, gr, 0.2f, 16, ColorAlpha(GREEN, 0.3f));
+    DrawCylinderWires(gp, gr, gr, 2.0f, 8, GREEN);
+}
+
+// Helper to set status message (defined locally for simplicity)
+static char s_statusMsg[256] = "";
+static float s_statusTimer = 0;
+
+void SetStatusMsg(const char* msg) {
+    strncpy(s_statusMsg, msg, sizeof(s_statusMsg)-1);
+    s_statusMsg[sizeof(s_statusMsg)-1] = 0;
+    s_statusTimer = 3.0f;
+}
+
+void DrawStatusMsg() {
+    if (s_statusTimer > 0) {
+        s_statusTimer -= GetFrameTime();
+        DrawText(s_statusMsg, 10, SCREEN_HEIGHT-24, 16, ColorAlpha(GREEN, fminf(1, s_statusTimer)));
     }
 }

@@ -25,6 +25,11 @@ public:
     Camera3D& GetCamera() { return m_camera; }
     Vector3 GetPlayerPos() const { return m_playerPosition; }
     
+    // Build mode
+    void EnterBuildMode();
+    void ExitBuildMode();
+    bool IsBuildMode() const { return m_state == GameState::BUILDING; }
+    
 private:
     GameManager() = default;
     ~GameManager() = default;
@@ -37,6 +42,12 @@ private:
     void UpdateCamera(float dt);
     void DrawPlayer();
     void PushObjects(LevelBase* level);
+    
+    // Build mode methods
+    void UpdateBuildMode(float dt);
+    void DrawBuildMode();
+    Vector3 GetMouseGroundPos();
+    int PickObject();
     
     GameState m_state = GameState::MENU;
     TimeMode m_timeMode = TimeMode::LIVE;
@@ -60,6 +71,18 @@ private:
     
     float m_levelTime = 0.0f;
     float m_accumulator = 0.0f;
+    
+    // Build mode state
+    BuildTool m_buildTool = BuildTool::PLACE_STATIC;
+    int m_selectedObject = -1;
+    float m_buildSnap = 0.5f;
+    char m_levelNameBuf[256] = "Untitled";
+    char m_levelHintBuf[512] = "";
+    int m_levelNameLen = 8;
+    int m_levelHintLen = 0;
+    bool m_editingNameField = false;
+    bool m_editingHintField = false;
+    bool m_showBuildPalette = true;
     
     std::unique_ptr<UIManager> m_ui;
 };

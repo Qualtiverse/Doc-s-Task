@@ -12,6 +12,7 @@ public:
     void Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime);
     
     void ToggleHelp() { m_showHelp = !m_showHelp; m_helpTimer = 5.0f; }
+    void SetHelpVisible(bool v) { m_showHelp = v; }
     
 private:
     void DrawMainUI(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime);
@@ -22,6 +23,8 @@ private:
     void DrawTimeline(TimeRecorder& recorder, float levelTime);
     void DrawModeIndicator(TimeMode mode);
     void DrawControlsHint();
+    void DrawBuildUI(LevelBase* level);
+    void DrawBuildHelpUI();
     
     bool m_showHelp = true;
     float m_helpTimer = 10.0f;

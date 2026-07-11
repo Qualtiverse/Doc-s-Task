@@ -23,6 +23,12 @@ void UIManager::Update(float dt, GameState state, TimeMode timeMode, TimeRecorde
 }
 
 void UIManager::Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime) {
+    if (state == GameState::BUILDING) {
+        DrawBuildUI(level);
+        if (m_showHelp) DrawBuildHelpUI();
+        return;
+    }
+    
     DrawMainUI(state, timeMode, recorder, level, levelTime);
     
     if (state == GameState::MENU) DrawMenuUI();
@@ -32,7 +38,7 @@ void UIManager::Draw(GameState state, TimeMode timeMode, TimeRecorder& recorder,
 }
 
 void UIManager::DrawMainUI(GameState state, TimeMode timeMode, TimeRecorder& recorder, LevelBase* level, float levelTime) {
-    DrawText(TextFormat("Doc's Task - Level %d", 1), 20, 20, 28, DARKGRAY);
+    DrawText("Doc's Task", 20, 20, 28, DARKGRAY);
     DrawText(level ? level->GetName() : "Loading...", 20, 55, 20, DARKGRAY);
     
     DrawModeIndicator(timeMode);
@@ -118,16 +124,21 @@ void UIManager::DrawControlsHint() {
 void UIManager::DrawMenuUI() {
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(DARKBLUE, 0.95f));
     
-    DrawText("DOC'S TASK", SCREEN_WIDTH/2 - 150, SCREEN_HEIGHT/2 - 150, 60, WHITE);
-    DrawText("Time Manipulation Puzzle Game", SCREEN_WIDTH/2 - 180, SCREEN_HEIGHT/2 - 80, 28, LIGHTGRAY);
+    DrawText("DOC'S TASK", SCREEN_WIDTH/2 - 150, SCREEN_HEIGHT/2 - 160, 60, WHITE);
+    DrawText("Time Manipulation Puzzle Game", SCREEN_WIDTH/2 - 180, SCREEN_HEIGHT/2 - 90, 28, LIGHTGRAY);
     
-    DrawRectangleRounded({SCREEN_WIDTH/2 - 120, SCREEN_HEIGHT/2, 240, 50}, 0.3f, 8, YELLOW);
-    DrawText("PRESS ENTER TO START", SCREEN_WIDTH/2 - 110, SCREEN_HEIGHT/2 + 12, 22, DARKBROWN);
+    float cyf = (float)(SCREEN_HEIGHT/2 - 20);
+    DrawRectangleRounded({(float)(SCREEN_WIDTH/2 - 120), cyf, 240, 44}, 0.3f, 8, YELLOW);
+    DrawText("[ENTER]  PLAY LEVELS", SCREEN_WIDTH/2 - 100, (int)cyf + 10, 18, DARKBROWN);
     
-    DrawText("Record your actions, then replay them", SCREEN_WIDTH/2 - 180, SCREEN_HEIGHT/2 + 70, 20, LIGHTGRAY);
-    DrawText("to solve puzzles cooperatively with your past self!", SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 + 100, 20, LIGHTGRAY);
+    cyf += 60;
+    DrawRectangleRounded({(float)(SCREEN_WIDTH/2 - 120), cyf, 240, 44}, 0.3f, 8, ColorAlpha(BLUE, 0.8f));
+    DrawText("[E]  LEVEL EDITOR", SCREEN_WIDTH/2 - 85, (int)cyf + 10, 18, WHITE);
     
-    DrawText("Controls: WASD=Move SPACE=Jump R=Record P=Replay T=TimeToggle", SCREEN_WIDTH/2 - 220, SCREEN_HEIGHT - 60, 18, GRAY);
+    DrawText("Record physics, replay time,", SCREEN_WIDTH/2 - 150, cy + 70, 18, LIGHTGRAY);
+    DrawText("solve puzzles with your past self!", SCREEN_WIDTH/2 - 160, cy + 95, 18, LIGHTGRAY);
+    
+    DrawText("WASD=Move SPACE=Jump R=Record P=Replay", SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT - 40, 16, GRAY);
 }
 
 void UIManager::DrawPauseUI() {
@@ -143,6 +154,39 @@ void UIManager::DrawLevelCompleteUI() {
     DrawRectangleRounded({SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 - 60, 400, 120}, 0.3f, 8, DARKGREEN);
     DrawText("LEVEL COMPLETE!", SCREEN_WIDTH/2 - 130, SCREEN_HEIGHT/2 - 40, 40, DARKGREEN);
     DrawText("Press TAB for Next Level", SCREEN_WIDTH/2 - 120, SCREEN_HEIGHT/2 + 20, 24, DARKGREEN);
+}
+
+void UIManager::DrawBuildUI(LevelBase* level) {
+    DrawRectangle(0, 0, SCREEN_WIDTH, 26, ColorAlpha(BLACK, 0.5f));
+    DrawText("BUILD MODE - WASD=Move SPACE=Jump [1-6]=Tools F=Palette TAB=Test Ctrl+S=Save Ctrl+L=Load H=Help",
+        10, 4, 14, ColorAlpha(WHITE, 0.8f));
+    
+    if (level) {
+        DrawText(TextFormat("Level: %s", level->EditorGetLevelName().c_str()),
+            SCREEN_WIDTH/2 - 100, 4, 14, YELLOW);
+    }
+}
+
+void UIManager::DrawBuildHelpUI() {
+    int x = SCREEN_WIDTH - 370, y = 32;
+    DrawRectangle(x-10, y-8, 360, 310, ColorAlpha(BLACK, 0.88f));
+    DrawRectangleLines(x-10, y-8, 360, 310, ColorAlpha(WHITE, 0.2f));
+    
+    DrawText("BUILD HELP (H)", x, y, 18, YELLOW); y += 26;
+    DrawText("[1] Place Static    [2] Place Dynamic", x, y, 14, LIGHTGRAY); y += 18;
+    DrawText("[3] Set Player      [4] Set Goal", x, y, 14, LIGHTGRAY); y += 18;
+    DrawText("[5] Delete Mode     [6] Select Mode", x, y, 14, LIGHTGRAY); y += 22;
+    DrawText("L-click        = Place / Delete / Select", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("Arrows         = Move selected (hold Shift=slow)", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("+/-            = Resize selected", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("PgUp/Dn        = Move up/down", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("Del/Bksp       = Delete selected", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText(",/.            = Decrease/Increase snap", x, y, 13, LIGHTGRAY); y += 22;
+    DrawText("TAB            = Test level (play mode)", x, y, 14, GREEN); y += 18;
+    DrawText("Ctrl+S         = Save to level.lvl", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("Ctrl+L         = Load from level.lvl", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("F              = Toggle palette", x, y, 13, LIGHTGRAY); y += 18;
+    DrawText("Click name/hint fields to edit text", x, y, 13, LIGHTGRAY);
 }
 
 void UIManager::DrawHelpUI() {

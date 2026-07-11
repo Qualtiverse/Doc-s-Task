@@ -27,6 +27,25 @@ public:
     void GetObjectStates(std::vector<TransformData>& states) const override;
     void SetObjectStates(const std::vector<TransformData>& states) override;
     
+    // Editor / game methods
+    bool CheckPlayerGoal(Vector3 playerPos) const { return CheckGoal(playerPos); }
+    
+    // Editor methods
+    int EditorAddObject(Vector3 pos, Vector3 size, float mass, bool isStatic, Color color);
+    void EditorRemoveObject(int index);
+    void EditorClearObjects();
+    void EditorSetGoal(Vector3 pos, float radius);
+    void EditorSetPlayerStart(Vector3 pos);
+    void EditorSetLevelName(const char* name) { m_levelName = name; }
+    void EditorSetLevelHint(const char* hint) { m_levelHint = hint; }
+    const std::string& EditorGetLevelName() const { return m_levelName; }
+    const std::string& EditorGetLevelHint() const { return m_levelHint; }
+    PhysicsObject* EditorGetObject(int index);
+    bool EditorSaveToFile(const char* path);
+    bool EditorLoadFromFile(const char* path);
+    Vector3 GetGoalPos() const { return m_goalPosition; }
+    float GetGoalRadius() const { return m_goalRadius; }
+
 protected:
     std::vector<std::unique_ptr<PhysicsObject>> m_objects;
     Vector3 m_playerStart{0, 2, 0};
@@ -35,6 +54,8 @@ protected:
     Color m_goalColor = GREEN;
     bool m_completed = false;
     float m_timeLimit = 60.0f;
+    std::string m_levelName = "Untitled";
+    std::string m_levelHint = "";
     
     void AddObject(std::unique_ptr<PhysicsObject> obj);
     void AddBox(Vector3 pos, Vector3 size, float mass = 1.0f, bool dynamic = true, Color color = WHITE);

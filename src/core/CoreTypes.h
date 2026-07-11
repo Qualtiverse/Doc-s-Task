@@ -15,12 +15,22 @@ constexpr int MAX_PHYSICS_OBJECTS = 64;
 
 enum class GameState {
     MENU,
+    BUILDING,
     PLAYING,
     RECORDING,
     REPLAYING,
     PAUSED,
     LEVEL_COMPLETE,
     GAME_COMPLETE
+};
+
+enum class BuildTool {
+    SELECT,
+    PLACE_STATIC,
+    PLACE_DYNAMIC,
+    SET_PLAYER,
+    SET_GOAL,
+    DELETE
 };
 
 enum class TimeMode {
@@ -100,7 +110,9 @@ public:
     Vector3 GetVelocity() const { return m_velocity; }
     Vector3 GetAngularVelocity() const { return m_angularVelocity; }
     Vector3 GetSize() const { return m_size; }
+    void SetSize(const Vector3& s) { m_size = s; }
     Vector3 GetStartPosition() const { return m_startPosition; }
+    Color GetColor() const { return m_color; }
     uint32_t GetId() const { return m_id; }
     float GetMass() const { return m_mass; }
     bool IsStatic() const { return m_isStatic; }
