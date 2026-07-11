@@ -166,42 +166,45 @@ void GameManager::Update(float dt) {
         }
     }
     
-    if (IsKeyPressed(KEY_H)) {
-        m_ui->ToggleHelp();
-    }
-    
-    m_accumulator += dt;
-    while (m_accumulator >= FIXED_TIMESTEP) {
-        if (m_state == GameState::PLAYING || m_state == GameState::RECORDING) {
-            m_levelTime += FIXED_TIMESTEP;
-            
-            level->Update(FIXED_TIMESTEP, m_recorder);
-            
-            if (m_timeMode == TimeMode::RECORDING) {
-                std::vector<TransformData> states;
-                level->GetObjectStates(states);
-                m_recorder.RecordFrame(states, m_levelTime);
-            }
-            
-            if (level->IsComplete()) {
-                ChangeState(GameState::LEVEL_COMPLETE);
-            }
-        }
-        else if (m_timeMode == TimeMode::REPLAYING) {
-            m_levelTime += FIXED_TIMESTEP;
-            
-            std::vector<TransformData> replayStates;
-            if (m_recorder.GetReplayFrame(replayStates, m_levelTime)) {
-                level->SetObjectStates(replayStates);
-            } else {
-                m_recorder.StopReplay();
-                m_timeMode = TimeMode::LIVE;
-                ChangeState(GameState::PLAYING);
-            }
+        if (IsKeyPressed(KEY_H)) {
+            m_ui->ToggleHelp();
         }
         
-        m_accumulator -= FIXED_TIMESTEP;
-    }
+        if (m_state == GameState::PLAYING || m_state == GameState::RECORDING || m_state == GameState::REPLAYING) {
+            UpdatePlayer(dt);
+        }
+        
+        m_accumulator += dt;
+        while (m_accumulator >= FIXED_TIMESTEP) {
+            if (m_state == GameState::PLAYING || m_state == GameState::RECORDING) {
+                m_levelTime += FIXED_TIMESTEP;
+                
+                if (m_timeMode == TimeMode::LIVE || m_timeMode == TimeMode::RECORDING) {
+                    PushObjects(level);
+                }
+                level->Update(FIXED_TIMESTEP, m_recorder);
+                
+                if (m_timeMode == TimeMode::RECORDING) {
+                    std::vector<TransformData> states;
+                    level->GetObjectStates(states);
+                    m_recorder.RecordFrame(states, m_levelTime);
+                }
+            }
+            else if (m_timeMode == TimeMode::REPLAYING) {
+                m_levelTime += FIXED_TIMESTEP;
+                
+                std::vector<TransformData> replayStates;
+                if (m_recorder.GetReplayFrame(replayStates, m_levelTime)) {
+                    level->SetObjectStates(replayStates);
+                } else {
+                    m_recorder.StopReplay();
+                    m_timeMode = TimeMode::LIVE;
+                    ChangeState(GameState::PLAYING);
+                }
+            }
+            
+            m_accumulator -= FIXED_TIMESTEP;
+        }
     
     m_ui->Update(dt, m_state, m_timeMode, m_recorder, m_levels[m_currentLevelIndex].get());
     UpdateCamera(dt);
@@ -243,4 +246,77 @@ void GameManager::UpdateCamera(float dt) {
     m_camera.position.z = m_cameraTarget.z + sinf(m_cameraAngle) * m_cameraDistance;
     m_camera.position.y = m_cameraTarget.y + m_cameraHeight;
     m_camera.target = m_cameraTarget;
+}
+
+void GameManager::UpdatePlayer(float dt) {
+    if (m_state == GameState::PAUSED || m_state == GameState::LEVEL_COMPLETE || m_state == GameState::MENU) return;
+    
+    Vector3 moveDir{0, 0, 0};
+    if (IsKeyDown(KEY_W)) moveDir.z -= 1;
+    if (IsKeyDown(KEY_S)) moveDir.z += 1;
+    if (IsKeyDown(KEY_A)) moveDir.x -= 1;
+    if (IsKeyDown(KEY_D)) moveDir.x += 1;
+    
+    float len = sqrtf(moveDir.x*moveDir.x + moveDir.z*moveDir.z);
+    if (len > 0) {
+        moveDir.x /= len;
+        moveDir.z /= len;
+    }
+    
+    m_playerVelocity.x = moveDir.x * m_moveSpeed;
+    m_playerVelocity.z = moveDir.z * m_moveSpeed;
+    
+    if (m_playerOnGround && IsKeyPressed(KEY_SPACE)) {
+        m_playerVelocity.y = m_jumpForce;
+        m_playerOnGround = false;
+    }
+    
+    m_playerVelocity.y -= 9.81f * dt;
+    
+    m_playerPosition.x += m_playerVelocity.x * dt;
+    m_playerPosition.y += m_playerVelocity.y * dt;
+    m_playerPosition.z += m_playerVelocity.z * dt;
+    
+    if (m_playerPosition.y < 0.5f) {
+        m_playerPosition.y = 0.5f;
+        m_playerVelocity.y = 0;
+        m_playerOnGround = true;
+    }
+    
+    m_cameraTarget = m_playerPosition;
+    m_cameraTarget.y += 1.0f;
+    
+    LevelBase* level = m_levels[m_currentLevelIndex].get();
+    if (level && level->CheckGoal(m_playerPosition)) {
+        ChangeState(GameState::LEVEL_COMPLETE);
+    }
+}
+
+void GameManager::DrawPlayer() {
+    if (m_state == GameState::MENU) return;
+    Vector3 pos = m_playerPosition;
+    DrawCube(pos, m_playerRadius*2, 1.0f, m_playerRadius*2, BLUE);
+    DrawCubeWires(pos, m_playerRadius*2, 1.0f, m_playerRadius*2, DARKBLUE);
+}
+
+void GameManager::PushObjects(LevelBase* level) {
+    if (!level) return;
+    for (int i = 0; i < level->GetObjectCount(); i++) {
+        std::vector<TransformData> states;
+        level->GetObjectStates(states);
+        if (i >= (int)states.size()) break;
+        Vector3 objPos = states[i].position;
+        float dx = m_playerPosition.x - objPos.x;
+        float dz = m_playerPosition.z - objPos.z;
+        float dist = sqrtf(dx*dx + dz*dz);
+        float pushDist = m_playerRadius + 0.5f;
+        if (dist < pushDist && dist > 0.001f) {
+            float pushForce = 5.0f;
+            dx /= dist;
+            dz /= dist;
+            states[i].velocity.x += dx * pushForce * FIXED_TIMESTEP;
+            states[i].velocity.z += dz * pushForce * FIXED_TIMESTEP;
+        }
+        level->SetObjectStates(states);
+    }
 }

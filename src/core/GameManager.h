@@ -23,6 +23,7 @@ public:
     void NextLevel();
     
     Camera3D& GetCamera() { return m_camera; }
+    Vector3 GetPlayerPos() const { return m_playerPosition; }
     
 private:
     GameManager() = default;
@@ -32,7 +33,10 @@ private:
     
     void Update(float dt);
     void Draw();
+    void UpdatePlayer(float dt);
     void UpdateCamera(float dt);
+    void DrawPlayer();
+    void PushObjects(LevelBase* level);
     
     GameState m_state = GameState::MENU;
     TimeMode m_timeMode = TimeMode::LIVE;
@@ -44,6 +48,11 @@ private:
     
     Camera3D m_camera;
     Vector3 m_playerPosition{0, 2, 0};
+    Vector3 m_playerVelocity{0, 0, 0};
+    bool m_playerOnGround = false;
+    float m_playerRadius = 0.4f;
+    float m_moveSpeed = 6.0f;
+    float m_jumpForce = 8.0f;
     Vector3 m_cameraTarget{0, 1, 0};
     float m_cameraDistance = 15.0f;
     float m_cameraAngle = 0.0f;
